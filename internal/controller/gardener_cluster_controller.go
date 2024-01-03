@@ -89,8 +89,11 @@ func (controller *GardenerClusterController) Reconcile(ctx context.Context, req 
 	metrics.IncrementReconciliationLoopsStarted()
 
 	err := controller.Get(ctx, req.NamespacedName, &cluster)
+
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+
+			controller.unsetStateMetric(ctx, req)
 			err = controller.deleteKubeconfigSecret(ctx, req.Name)
 		}
 
@@ -146,6 +149,15 @@ func (controller *GardenerClusterController) Reconcile(ctx context.Context, req 
 	}
 
 	return controller.resultWithRequeue(&cluster, requeueAfter), nil
+}
+
+func (controller *GardenerClusterController) unsetStateMetric(ctx context.Context, req ctrl.Request) {
+	var secretKey = "kubeconfig-" + req.NamespacedName.Name
+	var secretNamespacedName = types.NamespacedName{Name: secretKey, Namespace: "kcp-system"}
+	var kubeconfigSecret corev1.Secret
+	_ = controller.Get(ctx, secretNamespacedName, &kubeconfigSecret)
+
+	metrics.UnSetGardenerClusterStates(kubeconfigSecret)
 }
 
 func loggingContextFromCluster(cluster *imv1.GardenerCluster) []any {

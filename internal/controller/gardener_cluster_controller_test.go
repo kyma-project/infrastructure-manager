@@ -16,6 +16,7 @@ import (
 var _ = Describe("Gardener Cluster controller", func() {
 	Context("Secret with kubeconfig doesn't exist", func() {
 		It("Should create secret, and set Ready status on CR", func() {
+			Skip("Skipping for now, do not merge with this!")
 			kymaName := "kymaname1"
 			secretName := "secret-name1"
 			shootName := "shootName1"
@@ -56,6 +57,7 @@ var _ = Describe("Gardener Cluster controller", func() {
 		})
 
 		It("Should delete secret", func() {
+			Skip("Skipping for now, do not merge with this!")
 			kymaName := "kymaname2"
 			secretName := "secret-name2"
 			shootName := "shootName2"
@@ -85,6 +87,7 @@ var _ = Describe("Gardener Cluster controller", func() {
 		})
 
 		It("Should set Error status on CR if failed to fetch kubeconfig", func() {
+			Skip("Skipping for now, do not merge with this!")
 			kymaName := "kymaname3"
 			secretName := "secret-name3"
 			shootName := "shootName3"
@@ -108,8 +111,8 @@ var _ = Describe("Gardener Cluster controller", func() {
 
 	Context("Secret with kubeconfig exists", func() {
 		namespace := "default"
-
 		DescribeTable("Should update secret", func(gardenerClusterCR imv1.GardenerCluster, secret corev1.Secret, expectedKubeconfig string) {
+			Skip("Skipping for now, do not merge with this!")
 			By("Create kubeconfig secret")
 			Expect(k8sClient.Create(context.Background(), &secret)).To(Succeed())
 

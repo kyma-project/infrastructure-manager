@@ -1,13 +1,15 @@
 package metrics
 
 import (
+	"fmt"
 	v1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
+	corev1 "k8s.io/api/core/v1"
 	ctrlMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const (
-	shootName = "shootName"
+	runtimeId = "runtimeId"
 	state     = "state"
 )
 
@@ -26,7 +28,7 @@ var (
 			Subsystem: "infrastructure_manager",
 			Name:      "im_gardener_clusters_state",
 			Help:      "Indicates the Status.state for GardenerCluster CRs",
-		}, []string{shootName, state})
+		}, []string{runtimeId, state})
 )
 
 func init() {
@@ -38,5 +40,15 @@ func IncrementReconciliationLoopsStarted() {
 }
 
 func SetGardenerClusterStates(cluster v1.GardenerCluster) {
-	metricGardenerClustersState.WithLabelValues(cluster.Spec.Shoot.Name, string(cluster.Status.State)).Set(1)
+	metricGardenerClustersState.WithLabelValues(cluster.Name, string(cluster.Status.State)).Set(1)
+}
+
+func UnSetGardenerClusterStates(secret corev1.Secret) {
+	var runtimeId = secret.GetLabels()["kyma-project.io/runtime-id"]
+	var deletedReady = metricGardenerClustersState.DeleteLabelValues(runtimeId, "Ready")
+	var deletedError = metricGardenerClustersState.DeleteLabelValues(runtimeId, "Error")
+
+	if deletedReady || deletedError {
+		fmt.Printf("GardenerClusterStates deleted value for %v", runtimeId)
+	}
 }
