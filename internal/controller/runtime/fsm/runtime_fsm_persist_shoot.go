@@ -41,5 +41,5 @@ func sFnPersistShoot(_ context.Context, m *fsm, s *systemState) (stateFn, *ctrl.
 	if err := persist(path, s.shoot, m.writerProvider); err != nil {
 		return updateStatusAndStopWithError(err)
 	}
-	return updateStatusAndRequeue()
+	return updateStatusAndRequeueAfter(gardenerRequeueDuration)
 }

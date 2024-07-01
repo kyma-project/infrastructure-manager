@@ -2,6 +2,8 @@ package fsm
 
 import (
 	"context"
+	"encoding/json"
+	"k8s.io/apimachinery/pkg/types"
 
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	gardener_shoot "github.com/kyma-project/infrastructure-manager/internal/gardener/shoot"
@@ -28,23 +30,57 @@ func sFnCreateShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 	}
 
 	m.log.Info("Shoot converted successfully", "Name", shoot.Name, "Namespace", shoot.Namespace, "Shoot", shoot)
+	if s.shoot == nil {
+		m.log.Info("Gardener shoot does not exist, creating new one")
+		s.shoot, err = m.ShootClient.Create(ctx, &shoot, v1.CreateOptions{})
 
-	s.shoot, err = m.ShootClient.Create(ctx, &shoot, v1.CreateOptions{})
+		if err != nil {
+			m.log.Error(err, "Failed to create new gardener Shoot")
 
-	if err != nil {
-		m.log.Error(err, "Failed to create new gardener Shoot")
+			s.instance.UpdateStatePending(
+				imv1.ConditionTypeRuntimeProvisioned,
+				imv1.ConditionReasonGardenerError,
+				"False",
+				"Gardener API create error",
+			)
+			return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		}
 
-		s.instance.UpdateStatePending(
-			imv1.ConditionTypeRuntimeProvisioned,
-			imv1.ConditionReasonGardenerError,
-			"False",
-			"Gardener API create error",
-		)
+		m.log.Info("Gardener shoot for runtime initialised successfully", "Name", s.shoot.Name, "Namespace", s.shoot.Namespace)
 
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+	} else {
+		m.log.Info("Gardener shoot already exists, updating")
+
+		//setObjectFields(shoot)
+		shootData, err := json.Marshal(shoot)
+		if err != nil {
+			m.log.Error(err, "Failed to marshal shoot object to JSON")
+
+			s.instance.UpdateStatePending(
+				imv1.ConditionTypeRuntimeProvisioned,
+				imv1.ConditionReasonConversionError,
+				"False",
+				"Shoot marshaling error",
+			)
+			return updateStatusAndStop()
+		}
+
+		_, err = m.ShootClient.Patch(context.Background(), shoot.Name, types.ApplyPatchType, shootData, v1.PatchOptions{FieldManager: "provisioner", Force: ptrTo(true)})
+
+		if err != nil {
+			m.log.Error(err, "Failed to patch shoot object with JSON")
+
+			s.instance.UpdateStatePending(
+				imv1.ConditionTypeRuntimeProvisioned,
+				imv1.ConditionReasonConversionError,
+				"False",
+				"Shoot patch error",
+			)
+			return updateStatusAndStop()
+		}
+
+		m.log.Info("Gardener shoot for runtime patched successfully", "Name", s.shoot.Name, "Namespace", s.shoot.Namespace)
 	}
-
-	m.log.Info("Gardener shoot for runtime initialised successfully", "Name", s.shoot.Name, "Namespace", s.shoot.Namespace)
 
 	s.instance.UpdateStatePending(
 		imv1.ConditionTypeRuntimeProvisioned,
@@ -81,4 +117,15 @@ func FixConverterConfig() gardener_shoot.ConverterConfig {
 			ProjectName: "kyma-dev", //nolint:godox TODO: should be parametrised
 		},
 	}
+}
+
+// workaround
+/*func setObjectFields(shoot *v1beta1.Shoot) {
+	shoot.Kind = "Shoot"
+	shoot.APIVersion = "core.gardener.cloud/v1beta1"
+	shoot.ManagedFields = nil
+}*/
+
+func ptrTo[T any](v T) *T {
+	return &v
 }

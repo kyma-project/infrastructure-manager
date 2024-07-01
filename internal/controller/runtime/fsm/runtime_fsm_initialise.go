@@ -2,7 +2,6 @@ package fsm
 
 import (
 	"context"
-
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,14 +31,9 @@ func sFnInitialize(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.
 		return updateStatusAndRequeue()
 	}
 
-	if instanceIsNotBeingDeleted && s.shoot == nil {
-		m.log.Info("Gardener shoot does not exist, creating new one")
-		return switchState(sFnCreateShoot)
-	}
-
-	if instanceIsNotBeingDeleted && s.shoot != nil {
+	if instanceIsNotBeingDeleted {
 		m.log.Info("Gardener shoot exists, processing")
-		return switchState(sFnPrepareCluster) // wait for pending shoot operation to complete
+		return switchState(sFnSelectClusterProcessing)
 	}
 
 	if !instanceIsNotBeingDeleted && instanceHasFinalizer && s.shoot != nil {

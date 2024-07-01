@@ -3,6 +3,7 @@ package gardener
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 
 	gardener_api "github.com/gardener/gardener/pkg/apis/core/v1beta1"
@@ -16,6 +17,7 @@ type ShootClient interface {
 	Create(ctx context.Context, shoot *gardener_api.Shoot, opts v1.CreateOptions) (*gardener_api.Shoot, error)
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*gardener_api.Shoot, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *gardener_api.Shoot, err error)
 	// List(ctx context.Context, opts v1.ListOptions) (*gardener.ShootList, error)
 }
 
