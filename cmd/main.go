@@ -57,6 +57,7 @@ func init() {
 const defaultMinimalRotationTimeRatio = 0.6
 const defaultExpirationTime = 24 * time.Hour
 const defaultRuntimeReconcilerEnabled = false
+const defaultGardenerRequestTimeout = 60 * time.Second
 
 func main() {
 	var metricsAddr string
@@ -66,6 +67,7 @@ func main() {
 	var gardenerProjectName string
 	var minimalRotationTimeRatio float64
 	var expirationTime time.Duration
+	var gardenerRequestTimeout time.Duration
 	var enableRuntimeReconciler bool
 	var persistShoot bool
 
@@ -78,6 +80,7 @@ func main() {
 	flag.StringVar(&gardenerProjectName, "gardener-project-name", "gardener-project", "Name of the Gardener project")
 	flag.Float64Var(&minimalRotationTimeRatio, "minimal-rotation-time", defaultMinimalRotationTimeRatio, "The ratio determines what is the minimal time that needs to pass to rotate certificate.")
 	flag.DurationVar(&expirationTime, "kubeconfig-expiration-time", defaultExpirationTime, "Dynamic kubeconfig expiration time")
+	flag.DurationVar(&gardenerRequestTimeout, "gardener-request-timeout", defaultGardenerRequestTimeout, "Timeout duration for requests to Gardener")
 	flag.BoolVar(&enableRuntimeReconciler, "runtime-reconciler-enabled", defaultRuntimeReconcilerEnabled, "Feature flag for all runtime reconciler functionalities")
 	flag.BoolVar(&persistShoot, "persist-shoot", false, "Feature flag to allow persisting created shoots")
 
@@ -138,6 +141,7 @@ func main() {
 		logger,
 		rotationPeriod,
 		minimalRotationTimeRatio,
+		gardenerRequestTimeout,
 		metrics,
 	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GardenerCluster")

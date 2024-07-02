@@ -50,7 +50,7 @@ func (kp Provider) Fetch(ctx context.Context, shootName string) (string, error) 
 		},
 	}
 
-	err = kp.dynamicKubeconfigAPI.Create(context.Background(), shoot, &adminKubeconfigRequest)
+	err = kp.dynamicKubeconfigAPI.Create(ctx, shoot, &adminKubeconfigRequest)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create AdminKubeconfigRequest")
 	}

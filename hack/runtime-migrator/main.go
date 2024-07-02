@@ -31,22 +31,25 @@ const (
 	ShootNetworkingFilterExtensionType = "shoot-networking-filter"
 	runtimeCrFullPath                  = "%sshoot-%s.yaml"
 	runtimeIDAnnotation                = "kcp.provisioner.kyma-project.io/runtime-id"
+	contextTimeout                     = 5 * time.Minute
 )
 
 func main() {
 	cfg := migrator.NewConfig()
+	migratorContext, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
 
 	runtimeIDs := getRuntimeIDsFromStdin(cfg)
 	gardenerNamespace := fmt.Sprintf("garden-%s", cfg.GardenerProjectName)
-	list := getShootList(cfg, gardenerNamespace)
+	list := getShootList(migratorContext, cfg, gardenerNamespace)
 	provider, err := setupKubernetesKubeconfigProvider(cfg.GardenerKubeconfigPath, gardenerNamespace, expirationTime)
 	if err != nil {
-		log.Fatal("failed to create kubeconfig provider - ", err)
+		log.Print("failed to create kubeconfig provider - ", err)
 	}
 
 	kcpClient, err := migrator.CreateKcpClient(&cfg)
 	if err != nil {
-		log.Fatal("failed to create kcp client - ", kcpClient)
+		log.Print("failed to create kcp client - ", kcpClient)
 	}
 
 	results := make([]migrator.MigrationResult, 0)
@@ -72,13 +75,13 @@ func main() {
 			continue
 		}
 
-		runtime, runtimeCrErr := createRuntime(shoot, cfg, provider)
+		runtime, runtimeCrErr := createRuntime(migratorContext, shoot, cfg, provider)
 		if runtimeCrErr != nil {
 			results = appendResult(results, shoot, migrator.StatusFailedToCreateRuntimeCR, runtimeCrErr)
 			continue
 		}
 
-		err := saveRuntime(cfg, runtime, kcpClient)
+		err := saveRuntime(migratorContext, cfg, runtime, kcpClient)
 		if err != nil {
 			log.Printf("Failed to apply runtime CR, %s\n", err)
 
@@ -147,9 +150,9 @@ func getRuntimeIDsFromStdin(cfg migrator.Config) []string {
 	return runtimeIDs
 }
 
-func saveRuntime(cfg migrator.Config, runtime v1.Runtime, getClient client.Client) error {
+func saveRuntime(ctx context.Context, cfg migrator.Config, runtime v1.Runtime, getClient client.Client) error {
 	if !cfg.IsDryRun {
-		err := getClient.Create(context.Background(), &runtime)
+		err := getClient.Create(ctx, &runtime)
 
 		if err != nil {
 			return err
@@ -160,12 +163,12 @@ func saveRuntime(cfg migrator.Config, runtime v1.Runtime, getClient client.Clien
 	return nil
 }
 
-func createRuntime(shoot v1beta1.Shoot, cfg migrator.Config, provider kubeconfig.Provider) (v1.Runtime, error) {
-	var subjects = getAdministratorsList(provider, shoot.Name)
+func createRuntime(ctx context.Context, shoot v1beta1.Shoot, cfg migrator.Config, provider kubeconfig.Provider) (v1.Runtime, error) {
+	var subjects = getAdministratorsList(ctx, provider, shoot.Name)
 	var oidcConfig = getOidcConfig(shoot)
 	var hAFailureToleranceType = getFailureToleranceType(shoot)
 	var licenceType = shoot.Annotations["kcp.provisioner.kyma-project.io/licence-type"]
-	labels, err := getAllRuntimeLabels(shoot, cfg.Client)
+	labels, err := getAllRuntimeLabels(ctx, shoot, cfg.Client)
 	if err != nil {
 		return v1.Runtime{}, err
 	}
@@ -267,11 +270,11 @@ func checkIfShootNetworkFilteringEnabled(shoot v1beta1.Shoot) bool {
 	return false
 }
 
-func getShootList(cfg migrator.Config, gardenerNamespace string) *v1beta1.ShootList {
+func getShootList(ctx context.Context, cfg migrator.Config, gardenerNamespace string) *v1beta1.ShootList {
 	gardenerShootClient := setupGardenerShootClient(cfg.GardenerKubeconfigPath, gardenerNamespace)
-	list, err := gardenerShootClient.List(context.Background(), metav1.ListOptions{})
+	list, err := gardenerShootClient.List(ctx, metav1.ListOptions{})
 	if err != nil {
-		log.Fatal("Failed to retrieve shoots from Gardener - ", err)
+		log.Print("Failed to retrieve shoots from Gardener - ", err)
 	}
 
 	return list
@@ -286,8 +289,8 @@ func getFailureToleranceType(shoot v1beta1.Shoot) v1beta1.FailureToleranceType {
 	return ""
 }
 
-func getAdministratorsList(provider kubeconfig.Provider, shootName string) []string {
-	var kubeconfig, err = provider.Fetch(context.Background(), shootName)
+func getAdministratorsList(ctx context.Context, provider kubeconfig.Provider, shootName string) []string {
+	var kubeconfig, err = provider.Fetch(ctx, shootName)
 	if kubeconfig == "" {
 		log.Printf("Failed to get dynamic kubeconfig for shoot %s, %s\n", shootName, err.Error())
 		return []string{}
@@ -304,7 +307,7 @@ func getAdministratorsList(provider kubeconfig.Provider, shootName string) []str
 		log.Printf("Failed to create clientset from restconfig - %s\n", err)
 	}
 
-	var clusterRoleBindings, _ = clientset.RbacV1().ClusterRoleBindings().List(context.Background(), metav1.ListOptions{
+	var clusterRoleBindings, _ = clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{
 		LabelSelector: "reconciler.kyma-project.io/managed-by=reconciler,app=kyma",
 	})
 
@@ -381,7 +384,7 @@ func setupKubernetesKubeconfigProvider(kubeconfigPath string, namespace string, 
 		int64(expirationTime.Seconds())), nil
 }
 
-func getAllRuntimeLabels(shoot v1beta1.Shoot, getClient migrator.GetClient) (map[string]string, error) {
+func getAllRuntimeLabels(ctx context.Context, shoot v1beta1.Shoot, getClient migrator.GetClient) (map[string]string, error) {
 	enrichedRuntimeLabels := map[string]string{}
 	var err error
 
@@ -393,7 +396,7 @@ func getAllRuntimeLabels(shoot v1beta1.Shoot, getClient migrator.GetClient) (map
 	}
 	gardenerCluster := v1.GardenerCluster{}
 	shootKey := types.NamespacedName{Name: shoot.Name, Namespace: "kcp-system"}
-	getGardenerCRerr := k8sClient.Get(context.Background(), shootKey, &gardenerCluster)
+	getGardenerCRerr := k8sClient.Get(ctx, shootKey, &gardenerCluster)
 	if getGardenerCRerr != nil {
 		var errMsg = fmt.Sprintf("Failed to retrieve GardenerCluster CR for shoot %s\n", shoot.Name)
 		return map[string]string{}, errors.Wrap(getGardenerCRerr, errMsg)
