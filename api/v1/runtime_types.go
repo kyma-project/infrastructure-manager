@@ -28,7 +28,10 @@ import (
 //+kubebuilder:printcolumn:name="SHOOT-NAME",type=string,JSONPath=`.metadata.labels.kyma-project\.io/shoot-name`
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-const Finalizer = "runtime-controller.infrastructure-manager.kyma-project.io/deletion-hook"
+const (
+	Finalizer                              = "runtime-controller.infrastructure-manager.kyma-project.io/deletion-hook"
+	AnnotationGardenerCloudDelConfirmation = "confirmation.gardener.cloud/deletion"
+)
 
 const (
 	RuntimeStateReady       = "Ready"
@@ -60,12 +63,13 @@ const (
 	ConditionReasonConfigurationCompleted = RuntimeConditionReason("ConfigurationCompleted")
 	ConditionReasonConfigurationErr       = RuntimeConditionReason("ConfigurationError")
 
-	ConditionReasonDeletion        = RuntimeConditionReason("Deletion")
-	ConditionReasonDeletionErr     = RuntimeConditionReason("DeletionErr")
-	ConditionReasonConversionError = RuntimeConditionReason("ConversionErr")
-	ConditionReasonCreationError   = RuntimeConditionReason("CreationErr")
-	ConditionReasonGardenerError   = RuntimeConditionReason("GardenerErr")
-	ConditionReasonDeleted         = RuntimeConditionReason("Deleted")
+	ConditionReasonDeletion           = RuntimeConditionReason("Deletion")
+	ConditionReasonDeletionErr        = RuntimeConditionReason("DeletionErr")
+	ConditionReasonConversionError    = RuntimeConditionReason("ConversionErr")
+	ConditionReasonCreationError      = RuntimeConditionReason("CreationErr")
+	ConditionReasonGardenerError      = RuntimeConditionReason("GardenerErr")
+	ConditionReasonSerializationError = RuntimeConditionReason("SerializationErr")
+	ConditionReasonDeleted            = RuntimeConditionReason("Deleted")
 )
 
 //+kubebuilder:object:root=true

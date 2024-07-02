@@ -42,15 +42,18 @@ func sFnInitialize(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.
 		return switchState(sFnPrepareCluster) // wait for pending shoot operation to complete
 	}
 
-	if !instanceIsNotBeingDeleted && instanceHasFinalizer && s.shoot != nil {
-		m.log.Info("Instance is being deleted")
+	shootInOrAfterDeleting := s.shoot == nil || !s.shoot.GetDeletionTimestamp().IsZero()
+
+	if !instanceIsNotBeingDeleted && instanceHasFinalizer && !shootInOrAfterDeleting {
+		m.log.Info("Delete instance resources")
 		return switchState(sFnDeleteShoot)
 	}
 
-	if !instanceIsNotBeingDeleted && instanceHasFinalizer && s.shoot == nil {
+	if !instanceIsNotBeingDeleted && instanceHasFinalizer && shootInOrAfterDeleting {
 		return removeFinalizerAndStop(ctx, m, s)
 	}
 
+	m.log.Info("noting to reconcile, stopping sfm")
 	return stop()
 }
 

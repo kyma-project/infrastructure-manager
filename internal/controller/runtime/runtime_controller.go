@@ -55,7 +55,7 @@ func (r *RuntimeReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 
 	if err := r.Get(ctx, request.NamespacedName, &runtime); err != nil {
 		return ctrl.Result{
-			Requeue: true,
+			Requeue: false,
 		}, client.IgnoreNotFound(err)
 	}
 
@@ -90,6 +90,6 @@ func NewRuntimeReconciler(mgr ctrl.Manager, shootClient gardener.ShootClient, lo
 func (r *RuntimeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&imv1.Runtime{}).
-		WithEventFilter(predicate.And(predicate.GenerationChangedPredicate{})).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
