@@ -228,6 +228,7 @@ func (k *Runtime) UpdateStateDeletion(c RuntimeConditionType, r RuntimeCondition
 	meta.SetStatusCondition(&k.Status.Conditions, condition)
 }
 
+// FIXME: create update status for failed
 func (k *Runtime) UpdateStatePending(c RuntimeConditionType, r RuntimeConditionReason, status, msg string) {
 	if status != "False" {
 		k.Status.State = RuntimeStatePending

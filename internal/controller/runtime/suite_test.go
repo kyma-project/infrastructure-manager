@@ -27,6 +27,7 @@ import (
 	gardener_shoot "github.com/kyma-project/infrastructure-manager/internal/gardener/shoot"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
+	rbacv1 "k8s.io/api/rbac/v1"
 	//nolint:revive
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -47,14 +48,15 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg                *rest.Config         //nolint:gochecknoglobals
-	k8sClient          client.Client        //nolint:gochecknoglobals
-	gardenerTestClient client.Client        //nolint:gochecknoglobals
-	testEnv            *envtest.Environment //nolint:gochecknoglobals
-	suiteCtx           context.Context      //nolint:gochecknoglobals
-	cancelSuiteCtx     context.CancelFunc   //nolint:gochecknoglobals
-	runtimeReconciler  *RuntimeReconciler   //nolint:gochecknoglobals
-	customTracker      *CustomTracker       //nolint:gochecknoglobals
+	cfg                       *rest.Config         //nolint:gochecknoglobals
+	k8sClient                 client.Client        //nolint:gochecknoglobals
+	k8sFakeClientRoleBindings client.Client        //nolint:gochecknoglobals
+	gardenerTestClient        client.Client        //nolint:gochecknoglobals
+	testEnv                   *envtest.Environment //nolint:gochecknoglobals
+	suiteCtx                  context.Context      //nolint:gochecknoglobals
+	cancelSuiteCtx            context.CancelFunc   //nolint:gochecknoglobals
+	runtimeReconciler         *RuntimeReconciler   //nolint:gochecknoglobals
+	customTracker             *CustomTracker       //nolint:gochecknoglobals
 )
 
 func TestControllers(t *testing.T) {
@@ -109,6 +111,14 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	shootClientScheme := runtime.NewScheme()
+	_ = rbacv1.AddToScheme(shootClientScheme)
+	k8sFakeClientRoleBindings = fake.NewClientBuilder().WithScheme(shootClientScheme).Build()
+
+	fsm.GetShootClient = func(_ context.Context, _ client.SubResourceClient, _ *gardener_api.Shoot) (client.Client, error) {
+		return k8sFakeClientRoleBindings, nil
+	}
+
 	go func() {
 		defer GinkgoRecover()
 		suiteCtx, cancelSuiteCtx = context.WithCancel(context.Background())
@@ -137,6 +147,42 @@ func setupGardenerTestClientForUpdate() {
 	setupShootClientWithSequence(shoots)
 }
 
+// FakeClient is a mock implementation of the client.Client interface.
+// type FakeClient struct {
+//	client.Client
+//}
+//
+//func NewFakeClientWithMockedSubresource(mockedClient client.Client) client.Client {
+//	return &FakeClient{
+//		Client: mockedClient,
+//	}
+//}
+//
+//// SubResource returns a mock SubResourceClient for the "adminkubeconfig" subresource.
+//func (f *FakeClient) SubResource(subResource string) client.SubResourceClient {
+//	if subResource == "adminkubeconfig" {
+//		return &FakeSubResourceClient{}
+//	}
+//	return nil
+//}
+//
+//// FakeSubResourceClient is a mock implementation of the client.SubResourceClient interface.
+//type FakeSubResourceClient struct {
+//	client.SubResourceClient
+//}
+
+// Create handles the creation of the "adminkubeconfig" subresource.
+// func (f *FakeSubResourceClient) Create(_ context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+//	if _, ok := obj.(*gardener_api.Shoot); ok {
+//		if req, ok := subResource.(*authenticationv1alpha1.AdminKubeconfigRequest); ok {
+//			// Simulate setting the Kubeconfig in the request status
+//			req.Status.Kubeconfig = []byte("fake-kubeconfig")
+//			return nil
+//		}
+//	}
+//	return errors.New("unsupported subresource")
+//}
+
 func setupShootClientWithSequence(shoots []*gardener_api.Shoot) {
 	clientScheme := runtime.NewScheme()
 	_ = gardener_api.AddToScheme(clientScheme)
@@ -144,6 +190,7 @@ func setupShootClientWithSequence(shoots []*gardener_api.Shoot) {
 	tracker := clienttesting.NewObjectTracker(clientScheme, serializer.NewCodecFactory(clientScheme).UniversalDecoder())
 	customTracker = NewCustomTracker(tracker, shoots)
 	gardenerTestClient = fake.NewClientBuilder().WithScheme(clientScheme).WithObjectTracker(customTracker).Build()
+	// gardenerTestClient = NewFakeClientWithMockedSubresource(fake.NewClientBuilder().WithScheme(clientScheme).WithObjectTracker(customTracker).Build())
 
 	runtimeReconciler.UpdateShootClient(gardenerTestClient)
 }
