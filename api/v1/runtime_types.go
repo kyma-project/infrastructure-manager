@@ -18,6 +18,7 @@ package v1
 
 import (
 	"fmt"
+	"time"
 
 	gardener "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,6 +35,7 @@ const (
 	Finalizer                              = "runtime-controller.infrastructure-manager.kyma-project.io/deletion-hook"
 	AnnotationGardenerCloudDelConfirmation = "confirmation.gardener.cloud/deletion"
 	LabelControlledByProvisioner           = "kyma-project.io/controlled-by-provisioner"
+	AnnotationRuntimeOperationStarted      = "kyma-project.io/runtime-operation-started"
 )
 
 const (
@@ -71,12 +73,14 @@ const (
 type RuntimeConditionReason string
 
 const (
-	ConditionReasonProcessing          = RuntimeConditionReason("Processing")
-	ConditionReasonProcessingErr       = RuntimeConditionReason("ProcessingErr")
-	ConditionReasonProcessingCompleted = RuntimeConditionReason("ProcessingCompleted")
+	ConditionReasonProcessing             = RuntimeConditionReason("Processing")
+	ConditionReasonShootProcessingTimeout = RuntimeConditionReason("ShootProcessingTimeout")
+	ConditionReasonProcessingErr          = RuntimeConditionReason("ProcessingErr")
+	ConditionReasonProcessingCompleted    = RuntimeConditionReason("ProcessingCompleted")
 
 	ConditionReasonInitialized            = RuntimeConditionReason("Initialised")
 	ConditionReasonShootCreationPending   = RuntimeConditionReason("Pending")
+	ConditionReasonShootCreationTimeout   = RuntimeConditionReason("ShootCreationTimeout")
 	ConditionReasonShootCreationCompleted = RuntimeConditionReason("ShootCreationCompleted")
 
 	ConditionReasonGardenerCRCreated      = RuntimeConditionReason("GardenerClusterCRCreated")
@@ -87,6 +91,7 @@ const (
 	ConditionReasonDeletion             = RuntimeConditionReason("Deletion")
 	ConditionReasonGardenerCRDeleted    = RuntimeConditionReason("GardenerClusterCRDeleted")
 	ConditionReasonGardenerShootDeleted = RuntimeConditionReason("GardenerShootDeleted")
+	ConditionReasonShootDeletionTimeout = RuntimeConditionReason("ShootShootDeletionTimeout")
 	ConditionReasonDeletionErr          = RuntimeConditionReason("DeletionErr")
 	ConditionReasonConversionError      = RuntimeConditionReason("ConversionErr")
 	ConditionReasonCreationError        = RuntimeConditionReason("CreationErr")
@@ -302,4 +307,37 @@ func (k *Runtime) ValidateRequiredLabels() error {
 func (k *Runtime) IsControlledByProvisioner() bool {
 	value, found := k.Labels[LabelControlledByProvisioner]
 	return !found || value != "false"
+}
+
+func (k *Runtime) HasTimeoutElapsed(timeLimit time.Duration) bool {
+	if k.Annotations == nil {
+		return false
+	}
+
+	opStartTimeString := k.Annotations[AnnotationRuntimeOperationStarted]
+	if opStartTimeString == "" {
+		return false
+	}
+
+	lastSyncTime, err := time.Parse(time.RFC3339, opStartTimeString)
+	if err != nil {
+
+		return false
+	}
+
+	if time.Now().After(lastSyncTime.Add(timeLimit)) {
+		return true
+	}
+
+	return false
+}
+
+func (k *Runtime) HasRuntimeOperationTimedOut() bool {
+	if k.Status.State != RuntimeStateFailed {
+		return false
+	}
+
+	return k.IsConditionSet(ConditionTypeRuntimeProvisioned, ConditionReasonShootCreationTimeout) ||
+		k.IsConditionSet(ConditionTypeRuntimeDeprovisioned, ConditionReasonShootDeletionTimeout) ||
+		k.IsConditionSet(ConditionTypeRuntimeProvisioned, ConditionReasonShootProcessingTimeout)
 }
