@@ -6,8 +6,11 @@ require (
 	github.com/gardener/gardener v1.98.0
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
+	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/apimachinery v0.29.6
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -31,10 +34,8 @@ require (
 	golang.org/x/tools v0.22.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.29.6 // indirect
 	k8s.io/apiextensions-apiserver v0.29.6 // indirect
-	k8s.io/apimachinery v0.29.6 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
