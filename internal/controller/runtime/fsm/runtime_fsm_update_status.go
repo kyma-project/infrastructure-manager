@@ -9,12 +9,17 @@ import (
 
 func sFnUpdateStatus(result *ctrl.Result, err error) stateFn {
 	return func(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.Result, error) {
+		if err != nil {
+			m.Metrics.IncRuntimeFSMStopCounter()
+		}
+
 		// make sure there is a change in status
 		if reflect.DeepEqual(s.instance.Status, s.snapshot) {
 			return nil, result, err
 		}
 
 		updateErr := m.Status().Update(ctx, &s.instance)
+
 		if updateErr != nil {
 			m.log.Error(updateErr, "unable to update instance status!")
 			if err == nil {
@@ -22,6 +27,8 @@ func sFnUpdateStatus(result *ctrl.Result, err error) stateFn {
 			}
 			return nil, nil, err
 		}
+
+		m.Metrics.SetRuntimeStates(s.instance)
 		next := sFnEmmitEventfunc(nil, result, err)
 		return next, nil, nil
 	}

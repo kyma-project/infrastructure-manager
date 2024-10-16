@@ -3,6 +3,7 @@ package fsm
 import (
 	"time"
 
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -38,4 +39,9 @@ func stop() (stateFn, *ctrl.Result, error) {
 
 func switchState(fn stateFn) (stateFn, *ctrl.Result, error) {
 	return fn, nil, nil
+}
+
+func stopWithMetrics(metrics metrics.Metrics) (stateFn, *ctrl.Result, error) {
+	metrics.IncRuntimeFSMStopCounter()
+	return nil, nil, nil
 }

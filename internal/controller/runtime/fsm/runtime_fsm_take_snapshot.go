@@ -26,7 +26,7 @@ func sFnTakeSnapshot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctr
 
 	if err != nil && !apierrors.IsNotFound(err) {
 		m.log.Info("Failed to get Gardener shoot", "error", err)
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	if err == nil {

@@ -51,7 +51,6 @@ func (r *RuntimeReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 	r.Log.Info(request.String())
 
 	var runtime imv1.Runtime
-
 	if err := r.Get(ctx, request.NamespacedName, &runtime); err != nil {
 		return ctrl.Result{
 			Requeue: false,
@@ -68,7 +67,7 @@ func (r *RuntimeReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 			ShootClient:   r.ShootClient,
 			EventRecorder: r.EventRecorder,
 		})
-	requCounter++
+
 	return stateFSM.Run(ctx, runtime)
 }
 
@@ -85,6 +84,7 @@ func NewRuntimeReconciler(mgr ctrl.Manager, shootClient client.Client, logger lo
 
 func (r *RuntimeReconciler) UpdateShootClient(client client.Client) {
 	r.ShootClient = client
+	r.Cfg.AuditLogging.UpdateShootClient(client)
 }
 
 // SetupWithManager sets up the controller with the Manager.

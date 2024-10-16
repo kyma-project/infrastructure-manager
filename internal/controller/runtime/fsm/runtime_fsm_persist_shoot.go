@@ -60,7 +60,7 @@ func sFnDumpShootSpec(_ context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 	if err := persist(paths["runtime"], runtimeCp, m.writerProvider); err != nil {
 		return updateStatusAndStopWithError(err)
 	}
-	return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+	return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 }
 
 func createFilesPath(pvcPath, namespace, name string) map[string]string {

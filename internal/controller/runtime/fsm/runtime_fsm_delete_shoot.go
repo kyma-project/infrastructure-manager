@@ -15,7 +15,7 @@ func sFnDeleteShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 	// wait section
 	if !s.shoot.GetDeletionTimestamp().IsZero() {
 		m.log.Info("Waiting for shoot to be deleted", "Name", s.shoot.Name, "Namespace", s.shoot.Namespace)
-		return requeueAfter(gardenerRequeueDuration)
+		return requeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	// action section
@@ -57,7 +57,7 @@ func sFnDeleteShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 	}
 
 	// out section
-	return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+	return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 }
 
 func isGardenerCloudDelConfirmationSet(a map[string]string) bool {

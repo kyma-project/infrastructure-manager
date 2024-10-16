@@ -13,6 +13,7 @@ func sFnCreateShootDryRun(_ context.Context, m *fsm, s *systemState) (stateFn, *
 	newShoot, err := convertShoot(&s.instance, m.Config.ConverterConfig)
 	if err != nil {
 		m.log.Error(err, "Failed to convert Runtime instance to shoot object [dry-run]")
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatePendingWithErrorAndStop(
 			&s.instance,
 			imv1.ConditionTypeRuntimeProvisionedDryRun,

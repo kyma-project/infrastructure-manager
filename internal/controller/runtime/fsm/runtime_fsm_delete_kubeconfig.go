@@ -25,6 +25,7 @@ func sFnDeleteKubeconfig(ctx context.Context, m *fsm, s *systemState) (stateFn, 
 		if !k8serrors.IsNotFound(err) {
 			m.log.Error(err, "GardenerCluster CR read error", "name", runtimeID)
 			s.instance.UpdateStateDeletion(imv1.RuntimeStateTerminating, imv1.ConditionReasonKubernetesAPIErr, "False", err.Error())
+			m.Metrics.IncRuntimeFSMStopCounter()
 			return updateStatusAndStop()
 		}
 
@@ -39,7 +40,7 @@ func sFnDeleteKubeconfig(ctx context.Context, m *fsm, s *systemState) (stateFn, 
 	// wait section
 	if !cluster.DeletionTimestamp.IsZero() {
 		m.log.Info("Waiting for GardenerCluster CR to be deleted", "Runtime", runtimeID, "Shoot", s.shoot.Name)
-		return requeueAfter(controlPlaneRequeueDuration)
+		return requeueAfter(m.RCCfg.ControlPlaneRequeueDuration)
 	}
 
 	// action section
@@ -64,5 +65,5 @@ func sFnDeleteKubeconfig(ctx context.Context, m *fsm, s *systemState) (stateFn, 
 	}
 
 	// out succeeded section
-	return updateStatusAndRequeueAfter(controlPlaneRequeueDuration)
+	return updateStatusAndRequeueAfter(m.RCCfg.ControlPlaneRequeueDuration)
 }
