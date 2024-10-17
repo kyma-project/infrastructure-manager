@@ -5,6 +5,7 @@ import (
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"github.com/kyma-project/infrastructure-manager/internal/gardener/shoot/hyperscaler"
 	"github.com/pkg/errors"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -21,7 +22,7 @@ func ExtendWithCloudProfile(runtime imv1.Runtime, shoot *gardener.Shoot) error {
 		return err
 	}
 
-	shoot.Spec.CloudProfileName = cloudProfileName
+	shoot.Spec.CloudProfileName = ptr.To(cloudProfileName)
 
 	return nil
 }

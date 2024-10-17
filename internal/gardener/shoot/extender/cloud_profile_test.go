@@ -7,33 +7,34 @@ import (
 	"github.com/kyma-project/infrastructure-manager/internal/gardener/shoot/hyperscaler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 )
 
 func TestExtendWithCloudProfile(t *testing.T) {
 	for _, testCase := range []struct {
 		name            string
 		providerType    string
-		expectedProfile string
+		expectedProfile *string
 	}{
 		{
 			name:            "Set cloud profile name for aws",
 			providerType:    hyperscaler.TypeAWS,
-			expectedProfile: DefaultAWSCloudProfileName,
+			expectedProfile: ptr.To(DefaultAWSCloudProfileName),
 		},
 		{
 			name:            "Set cloud profile name for azure",
 			providerType:    hyperscaler.TypeAzure,
-			expectedProfile: DefaultAzureCloudProfileName,
+			expectedProfile: ptr.To(DefaultAzureCloudProfileName),
 		},
 		{
 			name:            "Set cloud profile for gcp",
 			providerType:    hyperscaler.TypeGCP,
-			expectedProfile: DefaultGCPCloudProfileName,
+			expectedProfile: ptr.To(DefaultGCPCloudProfileName),
 		},
 		{
 			name:            "Set cloud profile for openstack",
 			providerType:    hyperscaler.TypeOpenStack,
-			expectedProfile: DefaultOpenStackCloudProfileName,
+			expectedProfile: ptr.To(DefaultOpenStackCloudProfileName),
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
