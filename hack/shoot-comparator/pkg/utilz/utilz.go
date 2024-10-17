@@ -20,7 +20,7 @@ func Get[T any](v interface{}) (T, error) {
 		return result, err
 
 	case T:
-		return result, nil
+		return typedV, nil
 
 	case *T:
 		if typedV == nil {

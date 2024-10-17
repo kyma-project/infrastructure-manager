@@ -24,20 +24,20 @@ func (m *RawExtensionMatcher) Match(actual interface{}) (bool, error) {
 		return true, nil
 	}
 
-	aRawExtension, err := utilz.Get[runtime.RawExtension](actual)
+	rawXtActual, err := utilz.Get[runtime.RawExtension](actual)
 	if err != nil {
 		return false, err
 	}
 
-	eRawExtension, err := utilz.Get[runtime.RawExtension](m.toMatch)
+	rasXtToMatch, err := utilz.Get[runtime.RawExtension](m.toMatch)
 	if err != nil {
 		return false, err
 	}
 
-	sort.Sort(sortBytes(aRawExtension.Raw))
-	sort.Sort(sortBytes(eRawExtension.Raw))
+	sort.Sort(sortBytes(rawXtActual.Raw))
+	sort.Sort(sortBytes(rasXtToMatch.Raw))
 
-	return gomega.BeComparableTo(aRawExtension.Raw).Match(eRawExtension.Raw)
+	return gomega.BeComparableTo(rawXtActual.Raw).Match(rasXtToMatch.Raw)
 }
 
 func (m *RawExtensionMatcher) NegatedFailureMessage(_ interface{}) string {

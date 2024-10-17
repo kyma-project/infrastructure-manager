@@ -8,6 +8,7 @@ import (
 	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	"github.com/kyma-project/infrastructure-manager/hack/shoot-comparator/pkg/errors"
 	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	"github.com/onsi/gomega/types"
 	"sigs.k8s.io/yaml"
 )
@@ -45,163 +46,126 @@ func getShoot(i interface{}) (shoot v1beta1.Shoot, err error) {
 }
 
 func (m *Matcher) Match(actual interface{}) (success bool, err error) {
-	aShoot, err := getShoot(actual)
+	shootActual, err := getShoot(actual)
 	if err != nil {
 		return false, err
 	}
 
-	eShoot, err := getShoot(m.toMatch)
+	shootToMatch, err := getShoot(m.toMatch)
 	if err != nil {
 		return false, err
 	}
 
-	// Note: we define separate matchers for each field to make input more readable
-	// Annotations are not matched as they are not relevant for the comparison ; both KIM, and Provisioner have different set of annotations
-	for _, matcher := range []propertyMatcher{
-		// We need to skip comparing type meta as Provisioner doesn't set it.
-		// It is simpler to skip it than to make fix in the Provisioner.
-		//{
-		//	GomegaMatcher: gomega.BeComparableTo(eShoot.TypeMeta),
-		//	expected:      aShoot.TypeMeta,
-		//},
+	matchers := []propertyMatcher{
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Name),
-			expected:      aShoot.Name,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Name),
+			actual:        shootActual.Name,
 			path:          "metadata/name",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Namespace),
-			expected:      aShoot.Namespace,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Namespace),
+			actual:        shootActual.Namespace,
 			path:          "metadata/namespace",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Labels),
-			expected:      aShoot.Labels,
-			path:          "metadata/labels",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Addons),
-			expected:      aShoot.Spec.Addons,
-			path:          "spec/addons",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.CloudProfileName),
-			expected:      aShoot.Spec.CloudProfileName,
-			path:          "spec/cloudProfileName",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.DNS),
-			expected:      aShoot.Spec.DNS,
-			path:          "spec/dns",
-		},
-		{
-			GomegaMatcher: NewExtensionMatcher(eShoot.Spec.Extensions),
-			expected:      aShoot.Spec.Extensions,
+			GomegaMatcher: gstruct.MatchElements(idExtension, gstruct.IgnoreMissing, extensions(shootToMatch.Spec.Extensions)),
+			actual:        shootActual.Spec.Extensions,
 			path:          "spec/extensions",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Hibernation),
-			expected:      aShoot.Spec.Hibernation,
-			path:          "spec/hibernation",
+			GomegaMatcher: gstruct.MatchFields(gstruct.IgnoreMissing, gstruct.Fields{
+				"ClusterAutoscaler":           gstruct.Ignore(),
+				"KubeAPIServer":               newKubeAPIServerMatcher(shootToMatch.Spec.Kubernetes),
+				"KubeControllerManager":       gstruct.Ignore(),
+				"KubeScheduler":               gstruct.Ignore(),
+				"KubeProxy":                   gstruct.Ignore(),
+				"Kubelet":                     gstruct.Ignore(),
+				"Version":                     gomega.BeComparableTo(shootToMatch.Spec.Kubernetes.Version),
+				"VerticalPodAutoscaler":       gstruct.Ignore(),
+				"EnableStaticTokenKubeconfig": gomega.BeComparableTo(shootToMatch.Spec.Kubernetes.EnableStaticTokenKubeconfig),
+			}),
+			actual: shootActual.Spec.Kubernetes,
+			path:   "spec/kubernetes",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Kubernetes),
-			expected:      aShoot.Spec.Kubernetes,
-			path:          "spec/kubernetes",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Networking),
-			expected:      aShoot.Spec.Networking,
+			GomegaMatcher: newNetworkingMatcher(shootToMatch.Spec),
+			actual:        shootActual.Spec.Networking,
 			path:          "spec/networking",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Maintenance),
-			expected:      aShoot.Spec.Maintenance,
+			GomegaMatcher: newMaintenanceMatcher(shootToMatch.Spec),
+			actual:        shootActual.Spec.Maintenance,
 			path:          "spec/maintenance",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Monitoring),
-			expected:      aShoot.Spec.Monitoring,
-			path:          "spec/monitoring",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Purpose),
-			expected:      aShoot.Spec.Purpose,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.Purpose),
+			actual:        shootActual.Spec.Purpose,
 			path:          "spec/purpose",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Region),
-			expected:      aShoot.Spec.Region,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.Region),
+			actual:        shootActual.Spec.Region,
 			path:          "spec/region",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.SecretBindingName),
-			expected:      aShoot.Spec.SecretBindingName,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.SecretBindingName),
+			actual:        shootActual.Spec.SecretBindingName,
 			path:          "spec/secretBindingName",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.SeedName),
-			expected:      aShoot.Spec.SeedName,
-			path:          "spec/seedName",
+			GomegaMatcher: newDNSMatcher(shootToMatch.Spec.DNS),
+			path:          "spec/dns",
+			actual:        shootActual.Spec.DNS,
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.SeedSelector),
-			expected:      aShoot.Spec.SeedSelector,
-			path:          "spec/seedSelector",
+			GomegaMatcher: gstruct.MatchElements(
+				idToleration,
+				gstruct.IgnoreMissing,
+				tolerations(shootToMatch.Spec.Tolerations),
+			),
+			actual: shootActual.Spec.Tolerations,
+			path:   "spec/tolerations",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Resources),
-			expected:      aShoot.Spec.Resources,
-			path:          "spec/resources",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.Tolerations),
-			expected:      aShoot.Spec.Tolerations,
-			path:          "spec/tolerations",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.ExposureClassName),
-			expected:      aShoot.Spec.ExposureClassName,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.ExposureClassName),
+			actual:        shootActual.Spec.ExposureClassName,
 			path:          "spec/exposureClassName",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.SystemComponents),
-			expected:      aShoot.Spec.SystemComponents,
-			path:          "spec/systemComponents",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.ControlPlane),
-			expected:      aShoot.Spec.ControlPlane,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.ControlPlane),
+			actual:        shootActual.Spec.ControlPlane,
 			path:          "spec/controlPlane",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.SchedulerName),
-			expected:      aShoot.Spec.SchedulerName,
-			path:          "spec/schedulerName",
-		},
-		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.CloudProfile),
-			expected:      aShoot.Spec.CloudProfile,
+			GomegaMatcher: gomega.BeComparableTo(shootToMatch.Spec.CloudProfile),
+			actual:        shootActual.Spec.CloudProfile,
 			path:          "spec/cloudProfile",
 		},
 		{
-			GomegaMatcher: gomega.BeComparableTo(eShoot.Spec.CredentialsBindingName),
-			expected:      aShoot.Spec.CredentialsBindingName,
-			path:          "spec/credentialsBindingName",
-		},
-		{
-			GomegaMatcher: NewProviderMatcher(eShoot.Spec.Provider, "spec/provider"),
-			expected:      aShoot.Spec.Provider,
+			GomegaMatcher: NewProviderMatcher(shootToMatch.Spec.Provider, "spec/provider"),
+			actual:        shootActual.Spec.Provider,
 			path:          "spec/provider",
 		},
-	} {
-		ok, err := matcher.Match(matcher.expected)
+		{
+			GomegaMatcher: gomega.SatisfyAll(mapMatchers(shootToMatch.Labels)...),
+			actual:        shootActual.Labels,
+			path:          "metadata/labels",
+		},
+		{
+			GomegaMatcher: gomega.SatisfyAll(mapMatchers(shootActual.Annotations)...),
+			actual:        shootToMatch.Annotations,
+			path:          "metadata/annotations",
+		},
+	}
+
+	for _, matcher := range matchers {
+		ok, err := matcher.Match(matcher.actual)
 		if err != nil {
 			return false, err
 		}
 
 		if !ok {
-			msg := matcher.FailureMessage(matcher.expected)
+			msg := matcher.FailureMessage(matcher.actual)
 			if matcher.path != "" {
 				msg = fmt.Sprintf("%s: %s", matcher.path, msg)
 			}
@@ -218,4 +182,209 @@ func (m *Matcher) NegatedFailureMessage(_ interface{}) string {
 
 func (m *Matcher) FailureMessage(_ interface{}) string {
 	return strings.Join(m.fails, "\n")
+}
+
+func mapMatchers(m map[string]string) []types.GomegaMatcher {
+	mLen := len(m)
+	if mLen == 0 {
+		return []types.GomegaMatcher{
+			gomega.BeEmpty(),
+		}
+	}
+
+	out := make([]types.GomegaMatcher, mLen)
+	index := 0
+	for key, val := range m {
+		matcher := gomega.HaveKeyWithValue(key, val)
+		out[index] = matcher
+		index++
+	}
+	return out
+}
+
+func val(v interface{}) string {
+	if reflect.ValueOf(v).Kind() == reflect.Pointer && reflect.ValueOf(v).IsNil() {
+		return ""
+	}
+
+	if reflect.ValueOf(v).Kind() == reflect.Pointer {
+		return fmt.Sprintf("%v", reflect.ValueOf(v).Elem())
+	}
+
+	return fmt.Sprintf("%v", v)
+}
+
+func idToleration(v interface{}) string {
+	toleration, ok := v.(v1beta1.Toleration)
+	if !ok {
+		panic("invalid type")
+	}
+	return fmt.Sprintf("%s:%s", toleration.Key, val(toleration.Value))
+}
+
+func tolerations(ts []v1beta1.Toleration) gstruct.Elements {
+	out := map[string]types.GomegaMatcher{}
+	for _, t := range ts {
+		ID := idToleration(t)
+		out[ID] = gstruct.MatchAllFields(gstruct.Fields{
+			"Key":   gomega.BeComparableTo(t.Key),
+			"Value": gomega.BeComparableTo(t.Value),
+		})
+	}
+	return out
+}
+
+func idProvider(v interface{}) string {
+	provider, ok := v.(v1beta1.DNSProvider)
+	if !ok {
+		panic("invalid type")
+	}
+
+	return fmt.Sprintf("%s:%s:%s",
+		val(provider.Type),
+		val(provider.SecretName),
+		val(provider.Primary))
+}
+
+func providers(ps []v1beta1.DNSProvider) gstruct.Elements {
+	out := map[string]types.GomegaMatcher{}
+	for _, p := range ps {
+		ID := idProvider(p)
+		domainsMatcher := gomega.BeNil()
+		if p.Domains != nil {
+			domainsMatcher = gstruct.PointTo(
+				gstruct.MatchFields(
+					gstruct.IgnoreMissing,
+					gstruct.Fields{
+						"Include": gomega.ContainElements(p.Domains.Include),
+					}))
+		}
+
+		out[ID] = gstruct.MatchFields(
+			gstruct.IgnoreMissing,
+			gstruct.Fields{
+				"Primary":    gomega.Equal(p.Primary),
+				"SecretName": gomega.Equal(p.SecretName),
+				"Type":       gomega.Equal(p.Type),
+				"Domains":    domainsMatcher,
+				"Zones":      gstruct.Ignore(),
+			})
+	}
+
+	return out
+}
+
+func newDNSMatcher(dns *v1beta1.DNS) types.GomegaMatcher {
+	if dns == nil {
+		return gomega.BeNil()
+	}
+
+	return gstruct.PointTo(gstruct.MatchFields(
+		gstruct.IgnoreMissing,
+		gstruct.Fields{
+			"Domain": gomega.BeComparableTo(dns.Domain),
+			"Providers": gstruct.MatchElements(
+				idProvider,
+				gstruct.IgnoreMissing,
+				providers(dns.Providers)),
+		}))
+}
+
+func newMaintenanceMatcher(spec v1beta1.ShootSpec) types.GomegaMatcher {
+	if spec.Maintenance == nil {
+		return gomega.BeNil()
+	}
+
+	return gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
+		"AutoUpdate": gomega.BeComparableTo(spec.Maintenance.AutoUpdate),
+	}))
+}
+
+func newNetworkingMatcher(spec v1beta1.ShootSpec) types.GomegaMatcher {
+	if spec.Networking == nil {
+		return gomega.BeNil()
+	}
+
+	return gstruct.PointTo(
+		gstruct.MatchFields(
+			gstruct.IgnoreMissing,
+			gstruct.Fields{
+				"Type":           gomega.BeComparableTo(spec.Networking.Type),
+				"Nodes":          gomega.BeComparableTo(spec.Networking.Nodes),
+				"Pods":           gomega.BeComparableTo(spec.Networking.Pods),
+				"Services":       gomega.BeComparableTo(spec.Networking.Services),
+				"ProviderConfig": gstruct.Ignore(),
+				"IPFamilies":     gstruct.Ignore(),
+			}))
+}
+
+func newKubeAPIServerMatcher(k v1beta1.Kubernetes) types.GomegaMatcher {
+	if k.KubeAPIServer == nil {
+		return gomega.BeNil()
+	}
+
+	return gstruct.PointTo(gstruct.MatchFields(
+		gstruct.IgnoreMissing,
+		gstruct.Fields{
+			"OIDCConfig":                          newOIDCConfigMatcher(k.KubeAPIServer),
+			"KubernetesConfig":                    gstruct.Ignore(),
+			"AdmissionPlugins":                    gstruct.Ignore(),
+			"APIAudiences":                        gstruct.Ignore(),
+			"AuditConfig":                         gstruct.Ignore(),
+			"RuntimeConfig":                       gstruct.Ignore(),
+			"ServiceAccountConfig":                gstruct.Ignore(),
+			"WatchCacheSizes":                     gstruct.Ignore(),
+			"Requests":                            gstruct.Ignore(),
+			"EnableAnonymousAuthentication":       gstruct.Ignore(),
+			"EventTTL":                            gstruct.Ignore(),
+			"Logging":                             gstruct.Ignore(),
+			"DefaultNotReadyTolerationSeconds":    gstruct.Ignore(),
+			"DefaultUnreachableTolerationSeconds": gstruct.Ignore(),
+			"EncryptionConfig":                    gstruct.Ignore(),
+		},
+	))
+}
+
+func newOIDCConfigMatcher(c *v1beta1.KubeAPIServerConfig) types.GomegaMatcher {
+	if c == nil || c.OIDCConfig == nil {
+		return gomega.BeNil()
+	}
+
+	return gstruct.PointTo(gstruct.MatchFields(
+		gstruct.IgnoreMissing,
+		gstruct.Fields{
+			"CABundle":             gomega.BeComparableTo(c.OIDCConfig.CABundle),
+			"ClientID":             gomega.BeComparableTo(c.OIDCConfig.ClientID),
+			"GroupsClaim":          gomega.BeComparableTo(c.OIDCConfig.GroupsClaim),
+			"GroupsPrefix":         gomega.BeComparableTo(c.OIDCConfig.GroupsPrefix),
+			"IssuerURL":            gomega.BeComparableTo(c.OIDCConfig.IssuerURL),
+			"RequiredClaims":       gomega.BeComparableTo(c.OIDCConfig.RequiredClaims),
+			"SigningAlgs":          gomega.ContainElements(c.OIDCConfig.SigningAlgs),
+			"UsernameClaim":        gomega.BeComparableTo(c.OIDCConfig.UsernameClaim),
+			"UsernamePrefix":       gomega.BeComparableTo(c.OIDCConfig.UsernamePrefix),
+			"ClientAuthentication": gstruct.Ignore(),
+		},
+	))
+}
+
+func idExtension(v interface{}) string {
+	e, ok := v.(v1beta1.Extension)
+	if !ok {
+		panic("invalid type")
+	}
+
+	return e.Type
+}
+
+func extensions(es []v1beta1.Extension) gstruct.Elements {
+	out := map[string]types.GomegaMatcher{}
+	for _, e := range es {
+		ID := idExtension(e)
+		out[ID] = gstruct.MatchAllFields(gstruct.Fields{
+			"Type":           gomega.BeComparableTo(e.Type),
+			"ProviderConfig": gomega.BeComparableTo(e.ProviderConfig),
+			"Disabled":       gomega.BeComparableTo(e.Disabled),
+		})
+	}
+	return out
 }
