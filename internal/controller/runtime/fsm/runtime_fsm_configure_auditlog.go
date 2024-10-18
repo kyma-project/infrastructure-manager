@@ -25,7 +25,7 @@ func sFnConfigureAuditLog(ctx context.Context, m *fsm, s *systemState) (stateFn,
 			"Waiting for Gardener shoot to be Ready state after configuration of the Audit Logs",
 		)
 
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	if err == nil {

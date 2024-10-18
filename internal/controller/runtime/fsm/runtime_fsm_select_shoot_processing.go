@@ -19,14 +19,14 @@ func sFnSelectShootProcessing(_ context.Context, m *fsm, s *systemState) (stateF
 	if s.shoot.Spec.DNS == nil || s.shoot.Spec.DNS.Domain == nil {
 		msg := fmt.Sprintf("DNS Domain is not set yet for shoot: %s, scheduling for retry", s.shoot.Name)
 		m.log.Info(msg)
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	lastOperation := s.shoot.Status.LastOperation
 	if lastOperation == nil {
 		msg := fmt.Sprintf("Last operation is nil for shoot: %s, scheduling for retry", s.shoot.Name)
 		m.log.Info(msg)
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	patchShoot, err := shouldPatchShoot(&s.instance, s.shoot)
@@ -50,7 +50,7 @@ func sFnSelectShootProcessing(_ context.Context, m *fsm, s *systemState) (stateF
 	}
 
 	m.log.Info("Unknown shoot operation type, exiting with no retry")
-	return stop()
+	return stopWithMetrics()
 }
 
 func shouldPatchShoot(runtime *imv1.Runtime, shoot *gardener.Shoot) (bool, error) {

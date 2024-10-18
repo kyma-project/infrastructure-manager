@@ -3,11 +3,13 @@ package fsm
 import (
 	"bytes"
 	"context"
+	"github.com/stretchr/testify/mock"
 	"io"
 	"time"
 
 	gardener "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	"github.com/kyma-project/infrastructure-manager/internal/config"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics/mocks"
 	"github.com/kyma-project/infrastructure-manager/internal/controller/runtime/fsm/testing"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
@@ -23,6 +25,14 @@ var _ = Describe("KIM sFnPersist", func() {
 		}
 	}()
 
+	withMockedMetrics := func() fakeFSMOpt {
+		m := &mocks.Metrics{}
+		m.On("SetRuntimeStates", mock.Anything).Return()
+		m.On("CleanUpRuntimeGauge", mock.Anything).Return()
+		m.On("IncRuntimeFSMStopCounter").Return()
+		return withMetrics(m)
+	}
+
 	testCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -30,7 +40,10 @@ var _ = Describe("KIM sFnPersist", func() {
 	expectedRuntime.Spec.Shoot.Provider.Type = "aws"
 
 	It("should persist shoot data", func() {
-		next, _, err := sFnDumpShootSpec(testCtx, must(newFakeFSM, withStorageWriter(testWriterGetter), withConverterConfig(config.ConverterConfig{})), &systemState{shoot: &testing.ShootNoDNS, instance: *expectedRuntime})
+		next, _, err := sFnDumpShootSpec(testCtx,
+			must(newFakeFSM, withStorageWriter(testWriterGetter), withConverterConfig(config.ConverterConfig{}), withMockedMetrics(), withDefaultReconcileDuration()),
+			&systemState{shoot: &testing.ShootNoDNS, instance: *expectedRuntime},
+		)
 		Expect(err).To(BeNil())
 		Expect(next).To(haveName("sFnUpdateStatus"))
 

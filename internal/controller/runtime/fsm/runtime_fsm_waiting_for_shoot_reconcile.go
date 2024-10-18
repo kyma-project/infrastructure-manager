@@ -22,7 +22,7 @@ func sFnWaitForShootReconcile(_ context.Context, m *fsm, s *systemState) (stateF
 			"Unknown",
 			"Shoot update is in progress")
 
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 
 	case gardener.LastOperationStateFailed:
 		var reason ErrReason
@@ -40,6 +40,7 @@ func sFnWaitForShootReconcile(_ context.Context, m *fsm, s *systemState) (stateF
 			"False",
 			string(reason),
 		)
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatusAndStop()
 
 	case gardener.LastOperationStateSucceeded:
@@ -53,5 +54,5 @@ func sFnWaitForShootReconcile(_ context.Context, m *fsm, s *systemState) (stateF
 	}
 
 	m.log.Info("Update did not processed, exiting with no retry")
-	return stop()
+	return stopWithMetrics()
 }

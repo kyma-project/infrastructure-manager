@@ -35,8 +35,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = true
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(true, nil).Once()
 
@@ -72,8 +73,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = true
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, nil).Once()
 
@@ -109,8 +111,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = true
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, auditlogging.ErrMissingMapping).Once()
 
@@ -146,8 +149,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = false
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, auditlogging.ErrMissingMapping).Once()
 
@@ -183,8 +187,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = true
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, errors.New("some error during configuration")).Once()
 
@@ -220,8 +225,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = false
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, errors.New("some error during configuration")).Once()
 
@@ -257,8 +263,9 @@ func TestAuditLogState(t *testing.T) {
 			},
 		}
 
-		fsm := &fsm{AuditLogging: auditLog}
+		fsm := &fsm{}
 		fsm.RCCfg.AuditLogMandatory = true
+		fsm.RCCfg.AuditLogging = auditLog
 
 		auditLog.On("Enable", ctx, shoot).Return(false, k8serrors.NewConflict(gardener.Resource("shoots"), shoot.Name, errors.New("k8s conflict on update error"))).Once()
 

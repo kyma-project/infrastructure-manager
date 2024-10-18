@@ -14,6 +14,7 @@ func sFnCreateShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 	newShoot, err := convertShoot(&s.instance, m.Config.ConverterConfig)
 	if err != nil {
 		m.log.Error(err, "Failed to convert Runtime instance to shoot object")
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatePendingWithErrorAndStop(
 			&s.instance,
 			imv1.ConditionTypeRuntimeProvisioned,
@@ -32,7 +33,7 @@ func sFnCreateShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 			"False",
 			fmt.Sprintf("Gardener API create error: %v", err),
 		)
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 	}
 
 	m.log.Info(
@@ -55,5 +56,5 @@ func sFnCreateShoot(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl
 		return switchState(sFnDumpShootSpec)
 	}
 
-	return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+	return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 }

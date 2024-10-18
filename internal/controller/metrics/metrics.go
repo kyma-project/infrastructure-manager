@@ -19,20 +19,37 @@ const (
 	RuntimeIDLabel                 = "kyma-project.io/runtime-id"
 	ShootNameLabel                 = "kyma-project.io/shoot-name"
 	GardenerClusterStateMetricName = "im_gardener_clusters_state"
+	RuntimeStateMetricName         = "im_runtime_state"
+	RuntimeFSMStopMetricName       = "unexpected_stops_total"
+	provider                       = "provider"
 	state                          = "state"
 	reason                         = "reason"
+	message                        = "message"
 	KubeconfigExpirationMetricName = "im_kubeconfig_expiration"
 	expires                        = "expires"
 	lastSyncAnnotation             = "operator.kyma-project.io/last-sync"
 )
 
-type Metrics struct {
+//go:generate mockery --name=Metrics
+type Metrics interface {
+	SetRuntimeStates(runtime v1.Runtime)
+	CleanUpRuntimeGauge(runtimeID string)
+	IncRuntimeFSMStopCounter()
+	SetGardenerClusterStates(cluster v1.GardenerCluster)
+	CleanUpGardenerClusterGauge(runtimeID string)
+	CleanUpKubeconfigExpiration(runtimeID string)
+	SetKubeconfigExpiration(secret corev1.Secret, rotationPeriod time.Duration, minimalRotationTimeRatio float64)
+}
+
+type metricsImpl struct {
 	gardenerClustersStateGaugeVec *prometheus.GaugeVec
 	kubeconfigExpirationGauge     *prometheus.GaugeVec
+	runtimeStateGauge             *prometheus.GaugeVec
+	runtimeFSMUnexpectedStopsCnt  prometheus.Counter
 }
 
 func NewMetrics() Metrics {
-	m := Metrics{
+	m := &metricsImpl{
 		gardenerClustersStateGaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Subsystem: componentName,
@@ -45,12 +62,49 @@ func NewMetrics() Metrics {
 				Name:      KubeconfigExpirationMetricName,
 				Help:      "Exposes current kubeconfig expiration value in epoch timestamp value format",
 			}, []string{runtimeIDKeyName, shootNameIDKeyName, expires, rotationDuration, expirationDuration}),
+		runtimeStateGauge: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Subsystem: componentName,
+				Name:      RuntimeStateMetricName,
+				Help:      "Exposes current Status.state for Runtime CRs",
+			}, []string{runtimeIDKeyName, shootNameIDKeyName, provider, state, message}),
+		runtimeFSMUnexpectedStopsCnt: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: RuntimeFSMStopMetricName,
+				Help: "Exposes the number of unexpected state machine stop events",
+			}),
 	}
-	ctrlMetrics.Registry.MustRegister(m.gardenerClustersStateGaugeVec, m.kubeconfigExpirationGauge)
+	ctrlMetrics.Registry.MustRegister(m.gardenerClustersStateGaugeVec, m.kubeconfigExpirationGauge, m.runtimeStateGauge, m.runtimeFSMUnexpectedStopsCnt)
 	return m
 }
 
-func (m Metrics) SetGardenerClusterStates(cluster v1.GardenerCluster) {
+func (m metricsImpl) SetRuntimeStates(runtime v1.Runtime) {
+	runtimeID := runtime.GetLabels()[RuntimeIDLabel]
+
+	if runtimeID != "" {
+		size := len(runtime.Status.Conditions)
+
+		var reason = "No value"
+		if size > 0 {
+			reason = runtime.Status.Conditions[size-1].Message
+		}
+
+		m.CleanUpRuntimeGauge(runtimeID)
+		m.runtimeStateGauge.WithLabelValues(runtimeID, runtime.Spec.Shoot.Name, runtime.Spec.Shoot.Provider.Type, string(runtime.Status.State), reason).Set(1)
+	}
+}
+
+func (m metricsImpl) CleanUpRuntimeGauge(runtimeID string) {
+	m.runtimeStateGauge.DeletePartialMatch(prometheus.Labels{
+		runtimeIDKeyName: runtimeID,
+	})
+}
+
+func (m metricsImpl) IncRuntimeFSMStopCounter() {
+	m.runtimeFSMUnexpectedStopsCnt.Inc()
+}
+
+func (m metricsImpl) SetGardenerClusterStates(cluster v1.GardenerCluster) {
 	var runtimeID = cluster.GetLabels()[RuntimeIDLabel]
 	var shootName = cluster.GetLabels()[ShootNameLabel]
 
@@ -65,13 +119,13 @@ func (m Metrics) SetGardenerClusterStates(cluster v1.GardenerCluster) {
 	}
 }
 
-func (m Metrics) CleanUpGardenerClusterGauge(runtimeID string) {
+func (m metricsImpl) CleanUpGardenerClusterGauge(runtimeID string) {
 	m.gardenerClustersStateGaugeVec.DeletePartialMatch(prometheus.Labels{
 		runtimeIDKeyName: runtimeID,
 	})
 }
 
-func (m Metrics) CleanUpKubeconfigExpiration(runtimeID string) {
+func (m metricsImpl) CleanUpKubeconfigExpiration(runtimeID string) {
 	m.kubeconfigExpirationGauge.DeletePartialMatch(prometheus.Labels{
 		runtimeIDKeyName: runtimeID,
 	})
@@ -81,7 +135,7 @@ func computeExpirationInSeconds(rotationPeriod time.Duration, minimalRotationTim
 	return rotationPeriod.Seconds() / minimalRotationTimeRatio
 }
 
-func (m Metrics) SetKubeconfigExpiration(secret corev1.Secret, rotationPeriod time.Duration, minimalRotationTimeRatio float64) {
+func (m metricsImpl) SetKubeconfigExpiration(secret corev1.Secret, rotationPeriod time.Duration, minimalRotationTimeRatio float64) {
 	var runtimeID = secret.GetLabels()[RuntimeIDLabel]
 	var shootName = secret.GetLabels()[ShootNameLabel]
 

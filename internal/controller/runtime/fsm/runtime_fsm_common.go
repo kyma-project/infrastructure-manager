@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"context"
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,4 +39,11 @@ func stop() (stateFn, *ctrl.Result, error) {
 
 func switchState(fn stateFn) (stateFn, *ctrl.Result, error) {
 	return fn, nil, nil
+}
+
+func stopWithMetrics() (stateFn, *ctrl.Result, error) {
+	return func(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.Result, error) {
+		m.Metrics.IncRuntimeFSMStopCounter()
+		return stop()
+	}, nil, nil
 }

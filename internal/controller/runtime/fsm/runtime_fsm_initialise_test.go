@@ -2,10 +2,12 @@ package fsm
 
 import (
 	"context"
+	"github.com/stretchr/testify/mock"
 	"time"
 
 	gardener "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics/mocks"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
 	"github.com/onsi/gomega/types"
@@ -33,6 +35,14 @@ var _ = Describe("KIM sFnInitialise", func() {
 		return func(fsm *fsm) error {
 			return withFakedK8sClient(testScheme, objs...)(fsm)
 		}
+	}
+
+	withMockedMetrics := func() fakeFSMOpt {
+		m := &mocks.Metrics{}
+		m.On("SetRuntimeStates", mock.Anything).Return()
+		m.On("CleanUpRuntimeGauge", mock.Anything).Return()
+		m.On("IncRuntimeFSMStopCounter").Return()
+		return withMetrics(m)
 	}
 
 	testRt := imv1.Runtime{
@@ -149,7 +159,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return nothing when CR is being deleted without finalizer and shoot is missing",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithDeletionTimestamp},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -159,7 +169,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnUpdateStatus when CR is being deleted with finalizer and shoot is missing - Remove finalizer",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer, withTestSchemeAndObjects(&testRt)),
+			must(newFakeFSM, withTestFinalizer, withTestSchemeAndObjects(&testRt), withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithDeletionTimestampAndFinalizer},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -169,7 +179,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnDeleteShoot and no error when CR is being deleted with finalizer and shoot exists",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithDeletionTimestampAndFinalizer, shoot: &testShoot},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -179,7 +189,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnUpdateStatus and no error when CR has been created without finalizer - Add finalizer",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer, withTestSchemeAndObjects(&testRt)),
+			must(newFakeFSM, withTestFinalizer, withTestSchemeAndObjects(&testRt), withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRt},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -190,7 +200,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnUpdateStatus and no error when there is no Provisioning Condition - Add condition",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithFinalizerNoProvisioningCondition},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -200,7 +210,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnCreateShoot and no error when exists Provisioning Condition and shoot is missing",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithFinalizerAndProvisioningCondition},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -210,7 +220,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnCreateShootDryRun and no error when exists Provisioning Condition and shoot is missing",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testDryRunRtWithFinalizerAndProvisioningCondition},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -220,7 +230,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should stop when sFnCreateShootDryRun was already executed",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testDryRunRtWithFinalizerAndProvisioningReadyCondition},
 			testOpts{
 				MatchExpectedErr: BeNil(),
@@ -230,7 +240,7 @@ var _ = Describe("KIM sFnInitialise", func() {
 		Entry(
 			"should return sFnSelectShootProcessing and no error when exists Provisioning Condition and shoot exists",
 			testCtx,
-			must(newFakeFSM, withTestFinalizer),
+			must(newFakeFSM, withTestFinalizer, withMockedMetrics(), withDefaultReconcileDuration()),
 			&systemState{instance: testRtWithFinalizerAndProvisioningCondition, shoot: &testShoot},
 			testOpts{
 				MatchExpectedErr: BeNil(),

@@ -19,7 +19,10 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"testing"
 	"time"
 
@@ -28,11 +31,12 @@ import (
 	infrastructuremanagerv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"github.com/kyma-project/infrastructure-manager/internal/auditlogging"
 	"github.com/kyma-project/infrastructure-manager/internal/config"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics/mocks"
 	"github.com/kyma-project/infrastructure-manager/internal/controller/runtime/fsm"
 	gardener_shoot "github.com/kyma-project/infrastructure-manager/internal/gardener/shoot"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/mock"
 	v1 "k8s.io/api/autoscaling/v1"
 	v12 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -40,7 +44,6 @@ import (
 	//nolint:revive
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	clienttesting "k8s.io/client-go/testing"
@@ -48,7 +51,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -112,7 +114,23 @@ var _ = BeforeSuite(func() {
 	customTracker = NewCustomTracker(tracker, []*gardener_api.Shoot{}, []*gardener_api.Seed{})
 	gardenerTestClient = fake.NewClientBuilder().WithScheme(clientScheme).WithObjectTracker(customTracker).Build()
 
-	runtimeReconciler = NewRuntimeReconciler(mgr, gardenerTestClient, logger, fsm.RCCfg{Finalizer: infrastructuremanagerv1.Finalizer, Config: fixConverterConfigForTests()})
+	convConfig := fixConverterConfigForTests()
+
+	mm := &mocks.Metrics{}
+	mm.On("SetRuntimeStates", mock.Anything).Return()
+	mm.On("IncRuntimeFSMStopCounter").Return()
+	mm.On("CleanUpRuntimeGauge", mock.Anything).Return()
+
+	fsmCfg := fsm.RCCfg{
+		Finalizer:                   infrastructuremanagerv1.Finalizer,
+		Config:                      convConfig,
+		Metrics:                     mm,
+		AuditLogging:                auditlogging.NewAuditLogging(convConfig.ConverterConfig.AuditLog.TenantConfigPath, convConfig.ConverterConfig.AuditLog.PolicyConfigMapName, gardenerTestClient),
+		GardenerRequeueDuration:     3 * time.Second,
+		ControlPlaneRequeueDuration: 3 * time.Second,
+	}
+
+	runtimeReconciler = NewRuntimeReconciler(mgr, gardenerTestClient, logger, fsmCfg)
 	Expect(runtimeReconciler).NotTo(BeNil())
 	err = runtimeReconciler.SetupWithManager(mgr)
 	Expect(err).To(BeNil())

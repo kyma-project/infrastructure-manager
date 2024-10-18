@@ -19,6 +19,7 @@ func sFnPatchExistingShoot(ctx context.Context, m *fsm, s *systemState) (stateFn
 	updatedShoot, err := convertShoot(&s.instance, m.Config.ConverterConfig)
 	if err != nil {
 		m.log.Error(err, "Failed to convert Runtime instance to shoot object, exiting with no retry")
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatePendingWithErrorAndStop(&s.instance, imv1.ConditionTypeRuntimeProvisioned, imv1.ConditionReasonConversionError, "Runtime conversion error")
 	}
 
@@ -32,10 +33,11 @@ func sFnPatchExistingShoot(ctx context.Context, m *fsm, s *systemState) (stateFn
 	if err != nil {
 		if k8serrors.IsConflict(err) {
 			m.log.Info("Gardener shoot for runtime is outdated, retrying", "Name", s.shoot.Name, "Namespace", s.shoot.Namespace)
-			return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+			return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 		}
 
 		m.log.Error(err, "Failed to patch shoot object, exiting with no retry")
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatePendingWithErrorAndStop(&s.instance, imv1.ConditionTypeRuntimeProvisioned, imv1.ConditionReasonProcessingErr, "Shoot patch error")
 	}
 
@@ -53,7 +55,7 @@ func sFnPatchExistingShoot(ctx context.Context, m *fsm, s *systemState) (stateFn
 		"Shoot is pending for update",
 	)
 
-	return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+	return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 }
 
 func convertShoot(instance *imv1.Runtime, cfg config.ConverterConfig) (gardener.Shoot, error) {

@@ -65,8 +65,9 @@ func init() {
 
 const defaultMinimalRotationTimeRatio = 0.6
 const defaultExpirationTime = 24 * time.Hour
-const defaultRuntimeReconcilerEnabled = true
 const defaultGardenerRequestTimeout = 60 * time.Second
+const defaultControlPlaneRequeueDuration = 10 * time.Second
+const defaultGardenerRequeueDuration = 15 * time.Second
 
 func main() {
 	var metricsAddr string
@@ -77,7 +78,6 @@ func main() {
 	var minimalRotationTimeRatio float64
 	var expirationTime time.Duration
 	var gardenerRequestTimeout time.Duration
-	var enableRuntimeReconciler bool
 	var converterConfigFilepath string
 	var shootSpecDumpEnabled bool
 	var auditLogMandatory bool
@@ -92,7 +92,6 @@ func main() {
 	flag.Float64Var(&minimalRotationTimeRatio, "minimal-rotation-time", defaultMinimalRotationTimeRatio, "The ratio determines what is the minimal time that needs to pass to rotate certificate.")
 	flag.DurationVar(&expirationTime, "kubeconfig-expiration-time", defaultExpirationTime, "Dynamic kubeconfig expiration time")
 	flag.DurationVar(&gardenerRequestTimeout, "gardener-request-timeout", defaultGardenerRequestTimeout, "Timeout duration for requests to Gardener")
-	flag.BoolVar(&enableRuntimeReconciler, "runtime-reconciler-enabled", defaultRuntimeReconcilerEnabled, "Feature flag for all runtime reconciler functionalities")
 	flag.StringVar(&converterConfigFilepath, "converter-config-filepath", "/converter-config/converter_config.json", "A file path to the gardener shoot converter configuration.")
 	flag.BoolVar(&shootSpecDumpEnabled, "shoot-spec-dump-enabled", false, "Feature flag to allow persisting specs of created shoots")
 	flag.BoolVar(&auditLogMandatory, "audit-log-mandatory", true, "Feature flag to enable strict mode for audit log configuration")
@@ -165,46 +164,48 @@ func main() {
 	getReader := func() (io.Reader, error) {
 		return os.Open(converterConfigFilepath)
 	}
-	var converterConfig config.Config
-	if err = converterConfig.Load(getReader); err != nil {
+	var config config.Config
+	if err = config.Load(getReader); err != nil {
 		setupLog.Error(err, "unable to load converter configuration")
 		os.Exit(1)
 	}
 
 	validate := validator.New(validator.WithRequiredStructEnabled())
-	if err = validate.Struct(converterConfig); err != nil {
+	if err = validate.Struct(config); err != nil {
 		setupLog.Error(err, "invalid converter configuration")
 		os.Exit(1)
 	}
 
-	err = validateAuditLogConfiguration(converterConfig.ConverterConfig.AuditLog.TenantConfigPath)
+	err = validateAuditLogConfiguration(config.ConverterConfig.AuditLog.TenantConfigPath)
 	if err != nil {
 		setupLog.Error(err, "invalid Audit Log configuration")
 		os.Exit(1)
 	}
 
 	cfg := fsm.RCCfg{
-		Finalizer:         infrastructuremanagerv1.Finalizer,
-		ShootNamesapace:   gardenerNamespace,
-		Config:            converterConfig,
-		AuditLogMandatory: auditLogMandatory,
+		GardenerRequeueDuration:     defaultGardenerRequeueDuration,
+		ControlPlaneRequeueDuration: defaultControlPlaneRequeueDuration,
+		Finalizer:                   infrastructuremanagerv1.Finalizer,
+		ShootNamesapace:             gardenerNamespace,
+		Config:                      config,
+		AuditLogMandatory:           auditLogMandatory,
+		Metrics:                     metrics,
+		AuditLogging:                auditlogging.NewAuditLogging(config.ConverterConfig.AuditLog.TenantConfigPath, config.ConverterConfig.AuditLog.PolicyConfigMapName, gardenerClient),
 	}
 	if shootSpecDumpEnabled {
 		cfg.PVCPath = "/testdata/kim"
 	}
 
-	if enableRuntimeReconciler {
-		runtimeReconciler := runtime_controller.NewRuntimeReconciler(
-			mgr,
-			gardenerClient,
-			logger,
-			cfg,
-		)
+	runtimeReconciler := runtime_controller.NewRuntimeReconciler(
+		mgr,
+		gardenerClient,
+		logger,
+		cfg,
+	)
 
-		if err = runtimeReconciler.SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to setup controller with Manager", "controller", "Runtime")
-			os.Exit(1)
-		}
+	if err = runtimeReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to setup controller with Manager", "controller", "Runtime")
+		os.Exit(1)
 	}
 
 	//+kubebuilder:scaffold:builder
@@ -218,7 +219,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("Starting Manager", "kubeconfigExpirationTime", expirationTime, "kubeconfigRotationPeriod", rotationPeriod, "enableRuntimeReconciler", enableRuntimeReconciler)
+	setupLog.Info("Starting Manager", "kubeconfigExpirationTime", expirationTime, "kubeconfigRotationPeriod", rotationPeriod)
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")

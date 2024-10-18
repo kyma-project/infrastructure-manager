@@ -22,6 +22,7 @@ data:
         "projectName": "kyma-dev"
       },
       "machineImage": {
+        "defaultName": "gardenlinux",
         "defaultVersion": "1312.3.0"
       }
     }

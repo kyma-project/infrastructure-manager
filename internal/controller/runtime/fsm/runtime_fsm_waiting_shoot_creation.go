@@ -40,12 +40,12 @@ func sFnWaitForShootCreation(_ context.Context, m *fsm, s *systemState) (stateFn
 			"Unknown",
 			"Shoot creation in progress")
 
-		return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+		return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 
 	case gardener.LastOperationStateFailed:
 		if gardenerhelper.HasErrorCode(s.shoot.Status.LastErrors, gardener.ErrorInfraRateLimitsExceeded) {
 			m.log.Info(fmt.Sprintf("Error during cluster provisioning: Rate limits exceeded for Shoot %s, scheduling for retry", s.shoot.Name))
-			return updateStatusAndRequeueAfter(gardenerRequeueDuration)
+			return updateStatusAndRequeueAfter(m.RCCfg.GardenerRequeueDuration)
 		}
 
 		// also handle other retryable errors here
@@ -61,6 +61,7 @@ func sFnWaitForShootCreation(_ context.Context, m *fsm, s *systemState) (stateFn
 			"False",
 			"Shoot creation failed")
 
+		m.Metrics.IncRuntimeFSMStopCounter()
 		return updateStatusAndStop()
 
 	case gardener.LastOperationStateSucceeded:
@@ -74,7 +75,7 @@ func sFnWaitForShootCreation(_ context.Context, m *fsm, s *systemState) (stateFn
 
 	default:
 		m.log.Info("Unknown shoot operation state, exiting with no retry")
-		return stop()
+		return stopWithMetrics()
 	}
 }
 

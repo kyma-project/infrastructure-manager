@@ -12,6 +12,7 @@ import (
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"github.com/kyma-project/infrastructure-manager/internal/auditlogging"
 	"github.com/kyma-project/infrastructure-manager/internal/config"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,20 +21,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	gardenerRequeueDuration     = 15 * time.Second
-	controlPlaneRequeueDuration = 10 * time.Second
-)
-
 type stateFn func(context.Context, *fsm, *systemState) (stateFn, *ctrl.Result, error)
 type writerGetter = func(filePath string) (io.Writer, error)
 
 // runtime reconciler specific configuration
 type RCCfg struct {
-	Finalizer         string
-	PVCPath           string
-	ShootNamesapace   string
-	AuditLogMandatory bool
+	GardenerRequeueDuration     time.Duration
+	ControlPlaneRequeueDuration time.Duration
+	Finalizer                   string
+	PVCPath                     string
+	ShootNamesapace             string
+	AuditLogMandatory           bool
+	Metrics                     metrics.Metrics
+	AuditLogging                auditlogging.AuditLogging
 	config.Config
 }
 
@@ -64,7 +64,6 @@ type fsm struct {
 	log            logr.Logger
 	K8s
 	RCCfg
-	auditlogging.AuditLogging
 }
 
 func (m *fsm) Run(ctx context.Context, v imv1.Runtime) (ctrl.Result, error) {
@@ -108,6 +107,5 @@ func NewFsm(log logr.Logger, cfg RCCfg, k8s K8s) Fsm {
 		RCCfg:          cfg,
 		log:            log,
 		K8s:            k8s,
-		AuditLogging:   auditlogging.NewAuditLogging(cfg.Config.ConverterConfig.AuditLog.TenantConfigPath, cfg.Config.ConverterConfig.AuditLog.PolicyConfigMapName, k8s.ShootClient),
 	}
 }

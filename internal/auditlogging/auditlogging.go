@@ -25,6 +25,7 @@ var ErrMissingMapping = errors.New("missing mapping for selected region in provi
 //go:generate mockery --name=AuditLogging
 type AuditLogging interface {
 	Enable(ctx context.Context, shoot *gardener.Shoot) (bool, error)
+	UpdateShootClient(client client.Client)
 }
 
 //go:generate mockery --name=AuditLogConfigurator
@@ -34,6 +35,7 @@ type AuditLogConfigurator interface {
 	GetSeedObj(ctx context.Context, seedKey types.NamespacedName) (gardener.Seed, error)
 	UpdateShoot(ctx context.Context, shoot *gardener.Shoot) error
 	GetConfigFromFile() (data map[string]map[string]AuditLogData, err error)
+	UpdateClient(client client.Client)
 }
 
 type AuditLog struct {
@@ -93,6 +95,14 @@ func (a *auditLogConfig) GetSeedObj(ctx context.Context, seedKey types.Namespace
 		return gardener.Seed{}, err
 	}
 	return seed, nil
+}
+
+func (a *auditLogConfig) UpdateClient(client client.Client) {
+	a.client = client
+}
+
+func (al *AuditLog) UpdateShootClient(client client.Client) {
+	al.UpdateClient(client)
 }
 
 func (al *AuditLog) Enable(ctx context.Context, shoot *gardener.Shoot) (bool, error) {

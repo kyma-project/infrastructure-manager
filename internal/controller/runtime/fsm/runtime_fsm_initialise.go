@@ -4,6 +4,7 @@ import (
 	"context"
 
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/metrics"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -75,7 +76,7 @@ func sFnInitialize(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.
 	}
 
 	m.log.Info("noting to reconcile, stopping fsm")
-	return stop()
+	return stopWithMetrics()
 }
 
 func addFinalizerAndRequeue(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.Result, error) {
@@ -91,11 +92,14 @@ func addFinalizerAndRequeue(ctx context.Context, m *fsm, s *systemState) (stateF
 
 func removeFinalizerAndStop(ctx context.Context, m *fsm, s *systemState) (stateFn, *ctrl.Result, error) {
 	m.log.Info("removing finalizer")
+	runtimeID := s.instance.GetLabels()[metrics.RuntimeIDLabel]
 	controllerutil.RemoveFinalizer(&s.instance, m.Finalizer)
-
 	err := m.Update(ctx, &s.instance)
 	if err != nil {
 		return updateStatusAndStopWithError(err)
 	}
+
+	// remove from metrics
+	m.Metrics.CleanUpRuntimeGauge(runtimeID)
 	return stop()
 }
