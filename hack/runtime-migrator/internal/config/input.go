@@ -1,15 +1,13 @@
 package config
 
 import (
+	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
-
-	v1 "github.com/kyma-project/infrastructure-manager/api/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"os"
+	"time"
 )
 
 type Config struct {
@@ -23,8 +21,9 @@ type Config struct {
 }
 
 const (
-	InputTypeTxt  = "txt"
-	InputTypeJSON = "json"
+	InputTypeTxt        = "txt"
+	InputTypeJSON       = "json"
+	TimeoutK8sOperation = 20 * time.Second
 )
 
 func printConfig(cfg Config) {
@@ -56,34 +55,29 @@ func NewConfig() Config {
 	return result
 }
 
-func addToScheme(s *runtime.Scheme) error {
-	for _, add := range []func(s *runtime.Scheme) error{
-		corev1.AddToScheme,
-		v1.AddToScheme,
-	} {
-		if err := add(s); err != nil {
-			return fmt.Errorf("unable to add scheme: %w", err)
+func GetRuntimeIDsFromInputFile(cfg Config) ([]string, error) {
+	var runtimeIDs []string
+	var err error
+
+	if cfg.InputType == InputTypeJSON {
+		file, err := os.Open(cfg.InputFilePath)
+		if err != nil {
+			return nil, err
 		}
+		decoder := json.NewDecoder(file)
+		err = decoder.Decode(&runtimeIDs)
+	} else if cfg.InputType == InputTypeTxt {
+		file, err := os.Open(cfg.InputFilePath)
+		if err != nil {
+			return nil, err
+		}
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			runtimeIDs = append(runtimeIDs, scanner.Text())
+		}
+		err = scanner.Err()
+	} else {
+		return nil, fmt.Errorf("invalid input type: %s", cfg.InputType)
 	}
-	return nil
-}
-
-type GetClient = func() (client.Client, error)
-
-func CreateKcpClient(cfg *Config) (client.Client, error) {
-	restCfg, err := clientcmd.BuildConfigFromFlags("", cfg.KcpKubeconfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("unable to fetch rest config: %w", err)
-	}
-
-	scheme := runtime.NewScheme()
-	if err := addToScheme(scheme); err != nil {
-		return nil, err
-	}
-
-	var k8sClient, _ = client.New(restCfg, client.Options{
-		Scheme: scheme,
-	})
-
-	return k8sClient, nil
+	return runtimeIDs, err
 }
