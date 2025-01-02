@@ -1,6 +1,7 @@
-package config
+package initialisation
 
 import (
+	"context"
 	"fmt"
 	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	gardener_types "github.com/gardener/gardener/pkg/client/core/clientset/versioned/typed/core/v1beta1"
@@ -10,9 +11,14 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
+)
+
+const (
+	kubeconfigSecretKey = "config"
 )
 
 func addToScheme(s *runtime.Scheme) error {
@@ -27,8 +33,6 @@ func addToScheme(s *runtime.Scheme) error {
 	return nil
 }
 
-type GetClient = func() (client.Client, error)
-
 func CreateKcpClient(cfg *Config) (client.Client, error) {
 	restCfg, err := clientcmd.BuildConfigFromFlags("", cfg.KcpKubeconfigPath)
 	if err != nil {
@@ -40,11 +44,9 @@ func CreateKcpClient(cfg *Config) (client.Client, error) {
 		return nil, err
 	}
 
-	var k8sClient, _ = client.New(restCfg, client.Options{
+	return client.New(restCfg, client.Options{
 		Scheme: scheme,
 	})
-
-	return k8sClient, nil
 }
 
 func SetupKubernetesKubeconfigProvider(kubeconfigPath string, namespace string, expirationTime time.Duration) (kubeconfig.Provider, error) {
@@ -77,18 +79,70 @@ func SetupKubernetesKubeconfigProvider(kubeconfigPath string, namespace string, 
 		int64(expirationTime.Seconds())), nil
 }
 
-func SetupGardenerShootClient(kubeconfigPath, gardenerNamespace string) (gardener_types.ShootInterface, error) {
+func SetupGardenerShootClients(kubeconfigPath, gardenerNamespace string) (gardener_types.ShootInterface, client.Client, error) {
 	restConfig, err := gardener.NewRestConfigFromFile(kubeconfigPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	gardenerClientSet, err := gardener_types.NewForConfig(restConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	shootClient := gardenerClientSet.Shoots(gardenerNamespace)
 
-	return shootClient, nil
+	scheme := runtime.NewScheme()
+	if err := addToScheme(scheme); err != nil {
+		return nil, nil, err
+	}
+
+	dynamicClient, err := client.New(restConfig, client.Options{
+		Scheme: scheme,
+	})
+
+	err = v1beta1.AddToScheme(dynamicClient.Scheme())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return shootClient, dynamicClient, err
+}
+
+//nolint:gochecknoglobals
+func GetRuntimeClient(ctx context.Context, kcpClient client.Client, runtimeID string) (client.Client, error) {
+	secret, err := getKubeconfigSecret(ctx, kcpClient, runtimeID, "kcp-system")
+	if err != nil {
+		return nil, err
+	}
+
+	restConfig, err := clientcmd.RESTConfigFromKubeConfig(secret.Data[kubeconfigSecretKey])
+	if err != nil {
+		return nil, err
+	}
+
+	shootClientWithAdmin, err := client.New(restConfig, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+
+	return shootClientWithAdmin, nil
+}
+
+func getKubeconfigSecret(ctx context.Context, cnt client.Client, runtimeID, namespace string) (corev1.Secret, error) {
+	secretName := fmt.Sprintf("kubeconfig-%s", runtimeID)
+
+	var kubeconfigSecret corev1.Secret
+	secretKey := types.NamespacedName{Name: secretName, Namespace: namespace}
+
+	err := cnt.Get(ctx, secretKey, &kubeconfigSecret)
+
+	if err != nil {
+		return corev1.Secret{}, err
+	}
+
+	if kubeconfigSecret.Data == nil {
+		return corev1.Secret{}, fmt.Errorf("kubeconfig secret `%s` does not contain kubeconfig data", kubeconfigSecret.Name)
+	}
+	return kubeconfigSecret, nil
 }

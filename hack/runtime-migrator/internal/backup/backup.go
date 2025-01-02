@@ -4,22 +4,24 @@ import (
 	"context"
 	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	authenticationv1alpha1 "github.com/gardener/oidc-webhook-authenticator/apis/authentication/v1alpha1"
-	"github.com/kyma-project/infrastructure-manager/hack/runtime-migrator-app/internal/config"
+	"github.com/kyma-project/infrastructure-manager/hack/runtime-migrator-app/internal/initialisation"
 	"github.com/kyma-project/infrastructure-manager/pkg/gardener/kubeconfig"
 	rbacv1 "k8s.io/api/rbac/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Backuper struct {
-	cfg                config.Config
+	cfg                initialisation.Config
 	isDryRun           bool
 	kubeconfigProvider kubeconfig.Provider
+	kcpClient          client.Client
 }
 
-func NewBackuper(isDryRun bool, kubeconfigProvider kubeconfig.Provider) Backuper {
+func NewBackuper(isDryRun bool, kcpClient client.Client) Backuper {
 	return Backuper{
-		isDryRun:           isDryRun,
-		kubeconfigProvider: kubeconfigProvider,
+		isDryRun:  isDryRun,
+		kcpClient: kcpClient,
 	}
 }
 
@@ -30,10 +32,27 @@ type RuntimeBackup struct {
 	OIDCConfig          []authenticationv1alpha1.OpenIDConnect
 }
 
-func (b Backuper) Do(_ context.Context, shoot v1beta1.Shoot) (RuntimeBackup, error) {
+func (b Backuper) Do(_ context.Context, shoot v1beta1.Shoot, runtimeID string) (RuntimeBackup, error) {
+	runtimeClient, err := initialisation.GetRuntimeClient(context.Background(), b.kcpClient, runtimeID)
+	if err != nil {
+		return RuntimeBackup{}, err
+	}
+
+	crbs, err := b.getCRBs(runtimeClient)
+	if err != nil {
+		return RuntimeBackup{}, err
+	}
+
+	oidcConfig, err := b.getOIDCConfig(runtimeClient)
+	if err != nil {
+		return RuntimeBackup{}, err
+	}
+
 	return RuntimeBackup{
-		ShootToRestore: b.getShootToRestore(shoot),
-		OriginalShoot:  shoot,
+		ShootToRestore:      b.getShootToRestore(shoot),
+		OriginalShoot:       shoot,
+		ClusterRoleBindings: crbs,
+		OIDCConfig:          oidcConfig,
 	}, nil
 }
 
@@ -83,4 +102,35 @@ func (b Backuper) getShootToRestore(shootFromGardener v1beta1.Shoot) v1beta1.Sho
 			//Tolerations:  shootFromGardener.Spec.Tolerations,
 		},
 	}
+}
+
+func (b Backuper) getCRBs(runtimeClient client.Client) ([]rbacv1.ClusterRoleBinding, error) {
+	var crbList rbacv1.ClusterRoleBindingList
+	err := runtimeClient.List(context.Background(), &crbList)
+
+	if err != nil {
+		return nil, err
+	}
+
+	crbsToBackup := make([]rbacv1.ClusterRoleBinding, 0)
+
+	for _, crb := range crbList.Items {
+		if crb.RoleRef.Kind == "ClusterRole" && crb.RoleRef.Name == "cluster-admin" {
+			crbsToBackup = append(crbsToBackup, crb)
+		}
+	}
+
+	return crbsToBackup, nil
+}
+
+func (b Backuper) getOIDCConfig(runtimeClient client.Client) ([]authenticationv1alpha1.OpenIDConnect, error) {
+	var oidcConfigList authenticationv1alpha1.OpenIDConnectList
+
+	err := runtimeClient.List(context.Background(), &oidcConfigList)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return oidcConfigList.Items, nil
 }
