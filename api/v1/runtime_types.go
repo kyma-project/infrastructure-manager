@@ -94,6 +94,8 @@ const (
 
 	ConditionReasonAuditLogError = RuntimeConditionReason("AuditLogErr")
 
+	ConditionReasonMaintenanceWindowError = RuntimeConditionReason("MaintenanceWindowErr")
+
 	ConditionReasonAdministratorsConfigured = RuntimeConditionReason("AdministratorsConfigured")
 	ConditionReasonOidcConfigured           = RuntimeConditionReason("OidcConfigured")
 	ConditionReasonOidcError                = RuntimeConditionReason("OidcConfigurationErr")

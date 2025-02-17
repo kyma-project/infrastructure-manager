@@ -2,6 +2,7 @@ package extender
 
 import (
 	"encoding/json"
+	"github.com/kyma-project/infrastructure-manager/pkg/gardener/shoot/extender/testutils"
 	aws "github.com/kyma-project/infrastructure-manager/pkg/gardener/shoot/hyperscaler/aws"
 	"github.com/kyma-project/infrastructure-manager/pkg/gardener/shoot/hyperscaler/azure"
 	gcp "github.com/kyma-project/infrastructure-manager/pkg/gardener/shoot/hyperscaler/gcp"
@@ -106,7 +107,7 @@ func TestProviderExtenderForCreateAWS(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 
@@ -123,7 +124,7 @@ func TestProviderExtenderForCreateAWS(t *testing.T) {
 
 	t.Run("Return error for unknown provider", func(t *testing.T) {
 		// given
-		shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+		shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 		rt := imv1.Runtime{
 			Spec: imv1.RuntimeSpec{
 				Shoot: imv1.RuntimeShoot{
@@ -314,7 +315,7 @@ func TestProviderExtenderForPatchSingleWorkerAWS(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderPatchOperation(tc.EnableIMDSv2, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion, tc.CurrentShootWorkers, tc.ExistingInfraConfig, tc.ExistingControlPlaneConfig)
@@ -427,7 +428,7 @@ func TestProviderExtenderForCreateMultipleWorkersAWS(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderForCreateOperation(tc.EnableIMDSv2, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion)
@@ -613,7 +614,7 @@ func TestProviderExtenderForPatchWorkersUpdateAWS(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderPatchOperation(tc.EnableIMDSv2, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion, tc.CurrentShootWorkers, tc.ExistingInfraConfig, tc.ExistingControlPlaneConfig)
@@ -690,7 +691,7 @@ func TestProviderExtenderForCreateAzure(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 
@@ -744,7 +745,7 @@ func TestProviderExtenderForCreateMultipleWorkersAzure(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderForCreateOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion)
@@ -923,7 +924,7 @@ func TestProviderExtenderForPatchWorkersUpdateAzure(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderPatchOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion, tc.CurrentShootWorkers, tc.ExistingInfraConfig, tc.ExistingControlPlaneConfig)
@@ -997,7 +998,7 @@ func TestProviderExtenderForCreateGCP(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 
@@ -1049,7 +1050,7 @@ func TestProviderExtenderForCreateMultipleWorkersGCP(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderForCreateOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion)
@@ -1222,7 +1223,7 @@ func TestProviderExtenderForPatchWorkersUpdateGCP(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderPatchOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion, tc.CurrentShootWorkers, tc.ExistingInfraConfig, tc.ExistingControlPlaneConfig)
@@ -1318,7 +1319,7 @@ func TestProviderExtenderForCreateOpenstack(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderForCreateOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion)
@@ -1498,7 +1499,7 @@ func TestProviderExtenderForPatchWorkersUpdateOpenstack(t *testing.T) {
 	} {
 		t.Run(tname, func(t *testing.T) {
 			// given
-			shoot := fixEmptyGardenerShoot("cluster", "kcp-system")
+			shoot := testutils.FixEmptyGardenerShoot("cluster", "kcp-system")
 
 			// when
 			extender := NewProviderExtenderPatchOperation(false, tc.DefaultMachineImageName, tc.DefaultMachineImageVersion, tc.CurrentShootWorkers, tc.ExistingInfraConfig, tc.ExistingControlPlaneConfig)
