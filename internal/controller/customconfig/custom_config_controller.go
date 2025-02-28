@@ -18,7 +18,10 @@ package runtime
 
 import (
 	"context"
+	"github.com/kyma-project/infrastructure-manager/internal/controller/customconfig/registrycache"
+	"k8s.io/utils/ptr"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
@@ -33,21 +36,22 @@ import (
 
 // RuntimeReconciler reconciles a Runtime object
 // nolint:revive
-type RuntimeReconciler struct {
+type CustomSKRConfigReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
-	ShootClient   client.Client
 	Log           logr.Logger
 	Cfg           fsm.RCCfg
 	EventRecorder record.EventRecorder
 	RequestID     atomic.Uint64
 }
 
+const fieldManagerName = "customconfigcontroller"
+
 //+kubebuilder:rbac:groups=infrastructuremanager.kyma-project.io,resources=runtimes,verbs=get;list;watch;create;update;patch,namespace=kcp-system
 //+kubebuilder:rbac:groups=infrastructuremanager.kyma-project.io,resources=runtimes/status,verbs=get;list;delete;create;update;patch,namespace=kcp-system
 //+kubebuilder:rbac:groups=infrastructuremanager.kyma-project.io,resources=runtimes/finalizers,verbs=get;list;delete;create;update;patch,namespace=kcp-system
 
-func (r *RuntimeReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *CustomSKRConfigReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.Log.Info(request.String())
 
 	var runtime imv1.Runtime
@@ -63,33 +67,63 @@ func (r *RuntimeReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 	}
 
 	log := r.Log.WithValues("runtimeID", runtimeID, "shootName", runtime.Spec.Shoot.Name, "requestID", r.RequestID.Add(1))
-	log.Info("Reconciling Runtime", "Name", runtime.Name, "Namespace", runtime.Namespace)
+	log.Info("Reconciling custom configuration", "Name", runtime.Name, "Namespace", runtime.Namespace)
 
-	stateFSM := fsm.NewFsm(
-		log,
-		r.Cfg,
-		fsm.K8s{
-			Client:        r.Client,
-			ShootClient:   r.ShootClient,
-			EventRecorder: r.EventRecorder,
-		})
-
-	return stateFSM.Run(ctx, runtime)
+	return r.handleCustomConfig(ctx, runtime)
 }
 
-func NewRuntimeReconciler(mgr ctrl.Manager, shootClient client.Client, logger logr.Logger, cfg fsm.RCCfg) *RuntimeReconciler {
-	return &RuntimeReconciler{
+func (r *CustomSKRConfigReconciler) handleCustomConfig(ctx context.Context, runtime imv1.Runtime) (ctrl.Result, error) {
+	customConfigExplorer, err := registrycache.NewConfigExplorer(ctx, r.Client, runtime)
+	if err != nil {
+		r.Log.Error(err, "Failed to create custom config explorer")
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: 30 * time.Minute,
+		}, err
+	}
+
+	exists, err := customConfigExplorer.RegistryCacheConfigExists()
+	if err != nil {
+		r.Log.Error(err, "Failed to verify custom config explorer")
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: time.Minute,
+		}, err
+	}
+
+	if runtime.Spec.Caching.Enabled != exists {
+		runtime.Spec.Caching.Enabled = exists
+
+		err := r.Client.Patch(ctx, &runtime, client.Apply, &client.PatchOptions{
+			FieldManager: fieldManagerName,
+			Force:        ptr.To(true),
+		})
+		if err != nil {
+			r.Log.Error(err, "Failed to patch runtime")
+			return ctrl.Result{
+				Requeue:      true,
+				RequeueAfter: time.Minute,
+			}, err
+		}
+	}
+
+	return ctrl.Result{
+		Requeue:      true,
+		RequeueAfter: 30 * time.Minute,
+	}, err
+}
+
+func NewCustomSKRConfigReconciler(mgr ctrl.Manager, logger logr.Logger) *CustomSKRConfigReconciler {
+	return &CustomSKRConfigReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
-		ShootClient:   shootClient,
 		EventRecorder: mgr.GetEventRecorderFor("runtime-controller"),
 		Log:           logger,
-		Cfg:           cfg,
 	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RuntimeReconciler) SetupWithManager(mgr ctrl.Manager, numberOfWorkers int) error {
+func (r *CustomSKRConfigReconciler) SetupWithManager(mgr ctrl.Manager, numberOfWorkers int) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&imv1.Runtime{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: numberOfWorkers}).
@@ -98,6 +132,6 @@ func (r *RuntimeReconciler) SetupWithManager(mgr ctrl.Manager, numberOfWorkers i
 			predicate.LabelChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
 		)).
-		Named("runtime-controller").
+		Named("custom-config-controller").
 		Complete(r)
 }
