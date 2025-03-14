@@ -7,7 +7,6 @@ import (
 	gardener "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
 	"github.com/kyma-project/infrastructure-manager/pkg/config"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,12 +44,12 @@ func TestOidcExtender(t *testing.T) {
 		}
 
 		// when
-		extender := NewOidcExtender(defaultOidc)
+		extender := NewOidcExtender()
 		err := extender(runtimeShoot, &shoot)
 
 		// then
 		require.NoError(t, err)
 
-		assert.Equal(t, runtimeShoot.Spec.Shoot.Kubernetes.KubeAPIServer.OidcConfig, *shoot.Spec.Kubernetes.KubeAPIServer.OIDCConfig)
+		require.Nil(t, shoot.Spec.Kubernetes.KubeAPIServer.OIDCConfig)
 	})
 }
