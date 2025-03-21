@@ -29,6 +29,7 @@ func TestOidcExtender(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{},
 			Spec: imv1.RuntimeSpec{
 				Shoot: imv1.RuntimeShoot{
+					Name: "shoot",
 					Kubernetes: imv1.Kubernetes{
 						KubeAPIServer: imv1.APIServer{
 							OidcConfig: gardener.OIDCConfig{
@@ -45,12 +46,14 @@ func TestOidcExtender(t *testing.T) {
 		}
 
 		// when
-		extender := NewOidcExtender(defaultOidc)
+		extender := NewOidcExtender()
 		err := extender(runtimeShoot, &shoot)
 
 		// then
 		require.NoError(t, err)
 
-		assert.Equal(t, runtimeShoot.Spec.Shoot.Kubernetes.KubeAPIServer.OidcConfig, *shoot.Spec.Kubernetes.KubeAPIServer.OIDCConfig)
+		require.Nil(t, shoot.Spec.Kubernetes.KubeAPIServer.OIDCConfig)
+		require.NotNil(t, shoot.Spec.Kubernetes.KubeAPIServer.StructuredAuthentication)
+		assert.Equal(t, "structure-config-shoot", shoot.Spec.Kubernetes.KubeAPIServer.StructuredAuthentication.ConfigMapName)
 	})
 }
