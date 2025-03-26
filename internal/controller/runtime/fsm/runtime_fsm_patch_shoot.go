@@ -3,6 +3,8 @@ package fsm
 import (
 	"context"
 	"fmt"
+	"github.com/kyma-project/infrastructure-manager/pkg/gardener/shoot/extender"
+	"github.com/kyma-project/infrastructure-manager/pkg/gardener/structuredauth"
 	"reflect"
 	"time"
 
@@ -36,6 +38,20 @@ func sFnPatchExistingShoot(ctx context.Context, m *fsm, s *systemState) (stateFn
 			imv1.ConditionTypeRuntimeProvisioned,
 			imv1.ConditionReasonAuditLogError,
 			msgFailedToConfigureAuditlogs)
+	}
+
+	oidcConfig := structuredauth.GetOIDCConfigOrDefault(s.instance, m.RCCfg.ClusterConfig.DefaultSharedIASTenant.ToOIDCConfig())
+
+	cmName := fmt.Sprintf(extender.StructuredAuthConfigFmt, s.instance.Spec.Shoot.Name)
+	err = structuredauth.CreateOrUpdateStructuredAuthConfigMap(ctx, m.ShootClient, types.NamespacedName{Name: cmName, Namespace: m.ShootNamesapace}, oidcConfig)
+
+	if err != nil {
+		m.Metrics.IncRuntimeFSMStopCounter()
+		return updateStatePendingWithErrorAndStop(
+			&s.instance,
+			imv1.ConditionTypeRuntimeProvisioned,
+			imv1.ConditionReasonOidcError,
+			msgFailedStructuredConfigMap)
 	}
 
 	// NOTE: In the future we want to pass the whole shoot object here
