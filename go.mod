@@ -6,10 +6,10 @@ toolchain go1.24.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/gardener/gardener v1.115.0
+	github.com/gardener/gardener v1.115.1
 	github.com/gardener/gardener-extension-provider-aws v1.60.2
 	github.com/gardener/gardener-extension-provider-gcp v1.43.1
-	github.com/gardener/gardener-extension-provider-openstack v1.46.0
+	github.com/gardener/gardener-extension-provider-openstack v1.47.0
 	github.com/gardener/oidc-webhook-authenticator v0.34.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-playground/validator/v10 v10.25.0
@@ -21,8 +21,8 @@ require (
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.3
-	k8s.io/utils v0.0.0-20241210054802-24370beab758
-	sigs.k8s.io/controller-runtime v0.20.3
+	k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e
+	sigs.k8s.io/controller-runtime v0.20.4
 )
 
 require (
