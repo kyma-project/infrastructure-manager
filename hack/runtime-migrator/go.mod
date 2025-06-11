@@ -5,8 +5,8 @@ go 1.24.2
 toolchain go1.24.4
 
 require (
-	github.com/gardener/gardener v1.117.5
-	github.com/gardener/oidc-webhook-authenticator v0.35.0
+	github.com/gardener/gardener v1.120.1
+	github.com/gardener/oidc-webhook-authenticator v0.36.0
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/kyma-project/infrastructure-manager v0.0.0-20250611093638-c8409f30d72e
 	github.com/pkg/errors v0.9.1
@@ -75,7 +75,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 )
 
 replace (
