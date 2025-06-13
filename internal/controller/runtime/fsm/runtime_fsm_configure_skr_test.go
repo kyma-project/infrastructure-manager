@@ -2,29 +2,34 @@ package fsm
 
 import (
 	"context"
+	core_v1 "k8s.io/api/core/v1"
+	util "k8s.io/apimachinery/pkg/util/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"testing"
 
 	gardener "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	authenticationv1alpha1 "github.com/gardener/oidc-webhook-authenticator/apis/authentication/v1alpha1"
 	imv1 "github.com/kyma-project/infrastructure-manager/api/v1"
+	imv1_client "github.com/kyma-project/infrastructure-manager/internal/controller/runtime/fsm/client"
+	fsm_testing "github.com/kyma-project/infrastructure-manager/internal/controller/runtime/fsm/testing"
 	"github.com/kyma-project/infrastructure-manager/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	api "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestOidcState(t *testing.T) {
+func TestSkrConfigState(t *testing.T) {
 	t.Run("Should switch state to ApplyClusterRoleBindings when OIDC extension is disabled", func(t *testing.T) {
 		// given
 		ctx := context.Background()
-		fsm := &fsm{}
+		_, testFsm := setupFakeClient()
 
 		runtimeStub := runtimeForTest()
-		shootStub := shootForTest()
+		shootStub := fsm_testing.TestShootForPatch()
 		oidcService := gardener.Extension{
 			Type:     "shoot-oidc-service",
 			Disabled: ptr.To(true),
@@ -38,15 +43,15 @@ func TestOidcState(t *testing.T) {
 
 		expectedRuntimeConditions := []metav1.Condition{
 			{
-				Type:    string(imv1.ConditionTypeOidcConfigured),
-				Reason:  string(imv1.ConditionReasonOidcConfigured),
+				Type:    string(imv1.ConditionTypeOidcAndCMsConfigured),
+				Reason:  string(imv1.ConditionReasonOidcAndCMsConfigured),
 				Status:  "True",
 				Message: "OIDC extension disabled",
 			},
 		}
 
 		// when
-		stateFn, _, _ := sFnConfigureOidc(ctx, fsm, systemState)
+		stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
 
 		// then
 		require.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
@@ -57,31 +62,7 @@ func TestOidcState(t *testing.T) {
 		// given
 		ctx := context.Background()
 
-		// start of fake client setup
-		scheme, err := newOIDCTestScheme()
-		require.NoError(t, err)
-		var fakeClient = fake.NewClientBuilder().
-			WithScheme(scheme).
-			Build()
-		testFsm := &fsm{K8s: K8s{
-			ShootClient: fakeClient,
-			Client:      fakeClient,
-		},
-			RCCfg: RCCfg{
-				Config: config.Config{
-					ClusterConfig: config.ClusterConfig{
-						DefaultSharedIASTenant: createConverterOidcConfig("defaut-client-id"),
-					},
-				},
-			},
-		}
-		GetShootClient = func(
-			_ context.Context,
-			_ client.Client,
-			_ imv1.Runtime) (client.Client, error) {
-			return fakeClient, nil
-		}
-		// end of fake client setup
+		fakeClient, testFsm := setupFakeClient()
 
 		for _, tc := range []struct {
 			name                 string
@@ -96,7 +77,7 @@ func TestOidcState(t *testing.T) {
 
 				runtimeStub.Spec.Shoot.Kubernetes.KubeAPIServer.AdditionalOidcConfig = tc.additionalOIDCConfig
 
-				shootStub := shootForTest()
+				shootStub := fsm_testing.TestShootForPatch()
 				oidcService := gardener.Extension{
 					Type:     "shoot-oidc-service",
 					Disabled: ptr.To(false),
@@ -110,22 +91,22 @@ func TestOidcState(t *testing.T) {
 
 				expectedRuntimeConditions := []metav1.Condition{
 					{
-						Type:    string(imv1.ConditionTypeOidcConfigured),
-						Reason:  string(imv1.ConditionReasonOidcConfigured),
+						Type:    string(imv1.ConditionTypeOidcAndCMsConfigured),
+						Reason:  string(imv1.ConditionReasonOidcAndCMsConfigured),
 						Status:  "True",
-						Message: "OIDC configuration completed",
+						Message: "OIDC and kyma-provisioning-info configuration completed",
 					},
 				}
 
 				// when
-				stateFn, _, _ := sFnConfigureOidc(ctx, testFsm, systemState)
+				stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
 
 				// then
 				require.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
 
 				var openIdConnects authenticationv1alpha1.OpenIDConnectList
 
-				err = fakeClient.List(ctx, &openIdConnects)
+				err := fakeClient.List(ctx, &openIdConnects)
 				require.NoError(t, err)
 				assert.Len(t, openIdConnects.Items, 1)
 
@@ -139,34 +120,10 @@ func TestOidcState(t *testing.T) {
 		// given
 		ctx := context.Background()
 
-		// start of fake client setup
-		scheme, err := newOIDCTestScheme()
-		require.NoError(t, err)
-		var fakeClient = fake.NewClientBuilder().
-			WithScheme(scheme).
-			Build()
-		testFsm := &fsm{K8s: K8s{
-			ShootClient: fakeClient,
-			Client:      fakeClient,
-		},
-			RCCfg: RCCfg{
-				Config: config.Config{
-					ClusterConfig: config.ClusterConfig{
-						DefaultSharedIASTenant: createConverterOidcConfig("defaut-client-id"),
-					},
-				},
-			},
-		}
-		GetShootClient = func(
-			_ context.Context,
-			_ client.Client,
-			_ imv1.Runtime) (client.Client, error) {
-			return fakeClient, nil
-		}
-		// end of fake client setup
+		fakeClient, testFsm := setupFakeClient()
 
 		runtimeStub := runtimeForTest()
-		shootStub := shootForTest()
+		shootStub := fsm_testing.TestShootForPatch()
 		oidcService := gardener.Extension{
 			Type:     "shoot-oidc-service",
 			Disabled: nil,
@@ -180,22 +137,22 @@ func TestOidcState(t *testing.T) {
 
 		expectedRuntimeConditions := []metav1.Condition{
 			{
-				Type:    string(imv1.ConditionTypeOidcConfigured),
-				Reason:  string(imv1.ConditionReasonOidcConfigured),
+				Type:    string(imv1.ConditionTypeOidcAndCMsConfigured),
+				Reason:  string(imv1.ConditionReasonOidcAndCMsConfigured),
 				Status:  "True",
-				Message: "OIDC configuration completed",
+				Message: "OIDC and kyma-provisioning-info configuration completed",
 			},
 		}
 
 		// when
-		stateFn, _, _ := sFnConfigureOidc(ctx, testFsm, systemState)
+		stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
 
 		// then
 		require.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
 
 		var openIdConnects authenticationv1alpha1.OpenIDConnectList
 
-		err = fakeClient.List(ctx, &openIdConnects)
+		err := fakeClient.List(ctx, &openIdConnects)
 		require.NoError(t, err)
 		assert.Len(t, openIdConnects.Items, 1)
 
@@ -207,23 +164,7 @@ func TestOidcState(t *testing.T) {
 		// given
 		ctx := context.Background()
 
-		// start of fake client setup
-		scheme, err := newOIDCTestScheme()
-		require.NoError(t, err)
-		var fakeClient = fake.NewClientBuilder().
-			WithScheme(scheme).
-			Build()
-		testFsm := &fsm{K8s: K8s{
-			ShootClient: fakeClient,
-			Client:      fakeClient,
-		}}
-		GetShootClient = func(
-			_ context.Context,
-			_ client.Client,
-			_ imv1.Runtime) (client.Client, error) {
-			return fakeClient, nil
-		}
-		// end of fake client setup
+		fakeClient, testFsm := setupFakeClient()
 
 		runtimeStub := runtimeForTest()
 		additionalOidcConfig := &[]imv1.OIDCConfig{}
@@ -231,7 +172,7 @@ func TestOidcState(t *testing.T) {
 		*additionalOidcConfig = append(*additionalOidcConfig, createGardenerOidcConfig("runtime-cr-config1"))
 		runtimeStub.Spec.Shoot.Kubernetes.KubeAPIServer.AdditionalOidcConfig = additionalOidcConfig
 
-		shootStub := shootForTest()
+		shootStub := fsm_testing.TestShootForPatch()
 		oidcService := gardener.Extension{
 			Type:     "shoot-oidc-service",
 			Disabled: ptr.To(false),
@@ -245,22 +186,22 @@ func TestOidcState(t *testing.T) {
 
 		expectedRuntimeConditions := []metav1.Condition{
 			{
-				Type:    string(imv1.ConditionTypeOidcConfigured),
-				Reason:  string(imv1.ConditionReasonOidcConfigured),
+				Type:    string(imv1.ConditionTypeOidcAndCMsConfigured),
+				Reason:  string(imv1.ConditionReasonOidcAndCMsConfigured),
 				Status:  "True",
-				Message: "OIDC configuration completed",
+				Message: "OIDC and kyma-provisioning-info configuration completed",
 			},
 		}
 
 		// when
-		stateFn, _, _ := sFnConfigureOidc(ctx, testFsm, systemState)
+		stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
 
 		// then
 		require.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
 
 		var openIdConnects authenticationv1alpha1.OpenIDConnectList
 
-		err = fakeClient.List(ctx, &openIdConnects)
+		err := fakeClient.List(ctx, &openIdConnects)
 		require.NoError(t, err)
 		assert.Len(t, openIdConnects.Items, 2)
 		assert.Equal(t, "kyma-oidc-0", openIdConnects.Items[0].Name)
@@ -274,26 +215,10 @@ func TestOidcState(t *testing.T) {
 		// given
 		ctx := context.Background()
 
-		// start of fake client setup
-		scheme, err := newOIDCTestScheme()
-		require.NoError(t, err)
-		var fakeClient = fake.NewClientBuilder().
-			WithScheme(scheme).
-			Build()
-		testFSM := &fsm{K8s: K8s{
-			ShootClient: fakeClient,
-			Client:      fakeClient,
-		}}
-		GetShootClient = func(
-			_ context.Context,
-			_ client.Client,
-			_ imv1.Runtime) (client.Client, error) {
-			return fakeClient, nil
-		}
-		// end of fake client setup
+		fakeClient, testFsm := setupFakeClient()
 
 		kymaOpenIDConnectCR := createOpenIDConnectCR("old-kyma-oidc", "operator.kyma-project.io/managed-by", "infrastructure-manager")
-		err = fakeClient.Create(ctx, kymaOpenIDConnectCR)
+		err := fakeClient.Create(ctx, kymaOpenIDConnectCR)
 		require.NoError(t, err)
 
 		existingOpenIDConnectCR := createOpenIDConnectCR("old-non-kyma-oidc", "customer-label", "should-not-be-deleted")
@@ -301,7 +226,7 @@ func TestOidcState(t *testing.T) {
 		require.NoError(t, err)
 
 		runtimeStub := runtimeForTest()
-		shootStub := shootForTest()
+		shootStub := fsm_testing.TestShootForPatch()
 		oidcService := gardener.Extension{
 			Type:     "shoot-oidc-service",
 			Disabled: ptr.To(false),
@@ -315,15 +240,15 @@ func TestOidcState(t *testing.T) {
 
 		expectedRuntimeConditions := []metav1.Condition{
 			{
-				Type:    string(imv1.ConditionTypeOidcConfigured),
-				Reason:  string(imv1.ConditionReasonOidcConfigured),
+				Type:    string(imv1.ConditionTypeOidcAndCMsConfigured),
+				Reason:  string(imv1.ConditionReasonOidcAndCMsConfigured),
 				Status:  "True",
-				Message: "OIDC configuration completed",
+				Message: "OIDC and kyma-provisioning-info configuration completed",
 			},
 		}
 
 		// when
-		stateFn, _, _ := sFnConfigureOidc(ctx, testFSM, systemState)
+		stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
 
 		// then
 		require.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
@@ -350,19 +275,99 @@ func TestOidcState(t *testing.T) {
 		assertEqualConditions(t, expectedRuntimeConditions, systemState.instance.Status.Conditions)
 		assert.Equal(t, imv1.State("Pending"), systemState.instance.Status.State)
 	})
+
+	t.Run("Should apply kyma-provisioning-info config map", func(t *testing.T) {
+		ctx := context.Background()
+
+		runtime := makeInputRuntimeWithAnnotation(map[string]string{"operator.kyma-project.io/existing-annotation": "true"})
+		shootStub := fsm_testing.TestShootForPatch()
+		oidcService := gardener.Extension{
+			Type:     "shoot-oidc-service",
+			Disabled: ptr.To(false),
+		}
+		shootStub.Spec.Extensions = append(shootStub.Spec.Extensions, oidcService)
+
+		fakeClient, testFsm := setupFakeClient()
+
+		systemState := &systemState{
+			instance: *runtime,
+			shoot:    shootStub,
+		}
+
+		detailsConfigMap := &core_v1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kyma-provisioning-info",
+				Namespace: "kyma-system",
+			},
+			Data: nil,
+		}
+
+		cmCreationErr := testFsm.Create(ctx, detailsConfigMap)
+		assert.NoError(t, cmCreationErr)
+
+		// when
+		stateFn, _, _ := sFnConfigureSKR(ctx, testFsm, systemState)
+
+		// then
+
+		var detailsCM core_v1.ConfigMap
+		key := client.ObjectKey{
+			Name:      "kyma-provisioning-info",
+			Namespace: "kyma-system",
+		}
+		err := fakeClient.Get(ctx, key, &detailsCM)
+		assert.NoError(t, err)
+		assert.NotNil(t, detailsCM.Data)
+		assert.NotNil(t, detailsCM.Data["details"])
+		assert.Equal(t, detailsCM.Data["details"], "globalAccountID: global-account-id\ninfrastructureConfig:\n  apiVersion: aws.provider.extensions.gardener.cloud/v1alpha1\n  kind: InfrastructureConfig\n  networks:\n    vpc:\n      cidr: 10.250.0.0/22\n    zones:\n    - internal: 10.250.0.192/26\n      name: europe-west1-d\n      public: 10.250.0.128/26\n      workers: 10.250.0.0/25\nsubaccountID: subaccount-id\nworkerPools:\n  kyma:\n    autoScalerMax: 1\n    autoScalerMin: 1\n    haZones: false\n    machineType: m5.xlarge\n    name: test-worker\n")
+		assert.Contains(t, stateFn.name(), "sFnApplyClusterRoleBindings")
+	})
+
 }
 
-func newOIDCTestScheme() (*runtime.Scheme, error) {
-	schema := runtime.NewScheme()
-
-	for _, fn := range []func(*runtime.Scheme) error{
-		authenticationv1alpha1.AddToScheme,
-	} {
-		if err := fn(schema); err != nil {
-			return nil, err
-		}
+func setupFakeClient() (client.WithWatch, *fsm) {
+	// start of fake client setup
+	scheme := createConfigureSKRScheme()
+	var fakeClient = fake.NewClientBuilder().
+		WithInterceptorFuncs(interceptor.Funcs{
+			Patch: fsm_testing.GetFakePatchInterceptorForShootsAndConfigMaps(true),
+		}).
+		WithScheme(scheme).
+		Build()
+	testFsm := &fsm{K8s: K8s{
+		ShootClient: fakeClient,
+		Client:      fakeClient,
+	},
+		RCCfg: RCCfg{
+			Config: config.Config{
+				ClusterConfig: config.ClusterConfig{
+					DefaultSharedIASTenant: createConverterOidcConfig("defaut-client-id"),
+				},
+			},
+		},
 	}
-	return schema, nil
+	imv1_client.GetShootClient = func(
+		_ context.Context,
+		_ client.Client,
+		_ imv1.Runtime) (client.Client, error) {
+		return fakeClient, nil
+	}
+	// end of fake client setup
+	return fakeClient, testFsm
+}
+
+func createConfigureSKRScheme() *api.Scheme {
+	testScheme := api.NewScheme()
+
+	util.Must(imv1.AddToScheme(testScheme))
+	util.Must(gardener.AddToScheme(testScheme))
+	util.Must(core_v1.AddToScheme(testScheme))
+	util.Must(authenticationv1alpha1.AddToScheme(testScheme))
+	return testScheme
 }
 
 // sets the time to its zero value for comparison purposes
@@ -438,17 +443,5 @@ func runtimeForTest() imv1.Runtime {
 				Provider: imv1.Provider{Type: "aws"},
 			},
 		},
-	}
-}
-
-func shootForTest() *gardener.Shoot {
-	return &gardener.Shoot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shoot",
-			Namespace: "namespace",
-		},
-		Spec: gardener.ShootSpec{
-			Region:   "region",
-			Provider: gardener.Provider{Type: "aws"}},
 	}
 }
